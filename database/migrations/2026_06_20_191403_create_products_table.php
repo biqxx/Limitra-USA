@@ -16,8 +16,8 @@ return new class extends Migration
             $table->string('name');
             $table->string('brand');
             $table->string('price');
-            $table->foreignId('category_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('subcategory_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('category_id')->nullable()->constrained('categories')->nullOnDelete();
+            $table->foreignId('subcategory_id')->nullable()->constrained('subcategories')->nullOnDelete();
             $table->string('retailer')->nullable();
             $table->text('affiliate_url')->nullable();
             $table->text('image')->nullable();
