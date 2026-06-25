@@ -90,36 +90,42 @@ export function CategoryGrid({ categories }) {
 }
 
 export function ShareRow({ product }) {
-  const [copied, setCopied] = useState(false);
+  const [toast, setToast] = useState(null);
   const url = typeof window !== 'undefined' ? `${window.location.origin}/product/${product.id}` : `/product/${product.id}`;
   const text = `${product.name} by ${product.brand} — found on Limitra`;
   const enc = encodeURIComponent;
-  const targets = [
-    { key: "facebook", label: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}` },
-    { key: "x", label: "X", href: `https://twitter.com/intent/tweet?url=${enc(url)}&text=${enc(text)}` },
-    { key: "pinterest", label: "Pinterest", href: `https://pinterest.com/pin/create/button/?url=${enc(url)}&description=${enc(text)}` },
-    { key: "whatsapp", label: "WhatsApp", href: `https://wa.me/?text=${enc(text + " " + url)}` },
-    { key: "mail", label: "Email", href: `mailto:?subject=${enc(text)}&body=${enc(url)}` },
-  ];
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(url); }
-    catch (e) {}
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+
+  const copyUrl = async (msg = 'Link copied to clipboard') => {
+    try { await navigator.clipboard.writeText(url); } catch (e) {}
+    setToast(msg);
+    setTimeout(() => setToast(null), 1800);
   };
+
+  const targets = [
+    { key: "facebook",  label: "Facebook",  href: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}` },
+    { key: "instagram", label: "Instagram", copy: "Copied — paste in Instagram" },
+    { key: "tiktok",    label: "TikTok",    copy: "Copied — paste in TikTok" },
+    { key: "x",         label: "X",         href: `https://twitter.com/intent/tweet?url=${enc(url)}&text=${enc(text)}` },
+    { key: "pinterest", label: "Pinterest", href: `https://pinterest.com/pin/create/button/?url=${enc(url)}&description=${enc(text)}` },
+  ];
+
   return (
     <div className="share-row">
       <span className="share-label">Share</span>
-      <button className="share-btn" onClick={copy} aria-label="Copy link" title="Copy link"><I.link /></button>
+      <button className="share-btn" onClick={() => copyUrl()} aria-label="Copy link" title="Copy link"><I.link /></button>
       {targets.map((t) => {
         const Icon = I[t.key];
-        return (
+        return t.copy ? (
+          <button className="share-btn" key={t.key} onClick={() => copyUrl(t.copy)} aria-label={`Share on ${t.label}`} title={t.label}>
+            <Icon />
+          </button>
+        ) : (
           <a className="share-btn" key={t.key} href={t.href} target="_blank" rel="noopener noreferrer" aria-label={`Share on ${t.label}`} title={t.label}>
             <Icon />
           </a>
         );
       })}
-      {copied && <span className="copy-toast">Link copied to clipboard</span>}
+      {toast && <span className="copy-toast">{toast}</span>}
     </div>
   );
 }
