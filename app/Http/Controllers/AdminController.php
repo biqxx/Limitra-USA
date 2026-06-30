@@ -263,8 +263,9 @@ class AdminController extends Controller
         Article::create([
             'slug' => $request->slug ?: Str::slug($request->title),
             'tag' => $request->tag ?? 'Fashion',
+            'category' => $request->category ?? 'Women',
             'title' => $request->title,
-            'excerpt' => $request->excerpt,
+            'excerpt' => $request->excerpt ?? '',
             'img' => $request->img,
             'date' => $request->date ?? now()->format('F j, Y'),
             'author' => $request->author ?? 'Limitra Editors',
@@ -279,6 +280,7 @@ class AdminController extends Controller
     {
         Article::findOrFail($id)->update([
             'tag' => $request->tag,
+            'category' => $request->category,
             'title' => $request->title,
             'excerpt' => $request->excerpt,
             'img' => $request->img,

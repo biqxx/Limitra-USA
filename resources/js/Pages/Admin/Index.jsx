@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { usePage, router, useForm } from '@inertiajs/react';
 import I from '../../Components/Icons';
 import Seo from '../../Components/Seo';
-import { TAG_OPTS, ART_TAGS, BADGES } from '../../constants';
+import { TAG_OPTS, ART_TAGS, ART_CATS, BADGES } from '../../constants';
 
 // ── Image helpers ────────────────────────────────────────────────────────────
 
@@ -1218,6 +1218,7 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
   const isEdit = !!(initial && initial.id);
   const [title, setTitle] = useState(initial.title || '');
   const [tag, setTag] = useState(initial.tag || 'Fashion');
+  const [category, setCategory] = useState(initial.category || 'Women');
   const [excerpt, setExcerpt] = useState(initial.excerpt || '');
   const [img, setImg] = useState(initial.img || '');
   const today = new Date();
@@ -1237,7 +1238,7 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
     if (!title.trim()) return setErr('Title required.');
     const slug = initial.slug || admSlug(title);
     if (!isEdit && existing.includes(slug)) return setErr(`Slug "${slug}" already exists.`);
-    onSave({ slug, tag, title: title.trim(), excerpt: excerpt.trim(), img, date, author, readTime, body, featured: initial.featured || false }, isEdit, initial.id);
+    onSave({ slug, tag, category, title: title.trim(), excerpt: excerpt.trim(), img, date, author, readTime, body, featured: initial.featured || false }, isEdit, initial.id);
   };
 
   return (
@@ -1246,6 +1247,8 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
         <div className="adm-field"><label>Title <span className="req">*</span></label><input className="adm-input" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
         <div className="adm-field"><label>Tag</label>
           <select className="adm-input" value={tag} onChange={(e) => setTag(e.target.value)}>{ART_TAGS.map((t) => <option key={t}>{t}</option>)}</select></div>
+        <div className="adm-field"><label>Category</label>
+          <select className="adm-input" value={category} onChange={(e) => setCategory(e.target.value)}>{ART_CATS.map((c) => <option key={c}>{c}</option>)}</select></div>
       </div>
       <div className="adm-field"><label>Excerpt</label><textarea className="adm-textarea" style={{ minHeight: 60 }} value={excerpt} onChange={(e) => setExcerpt(e.target.value)} placeholder="Short summary shown on homepage and guide cards." /></div>
       <ImgInput label="Hero image (wide landscape)" value={img} onChange={setImg} />
