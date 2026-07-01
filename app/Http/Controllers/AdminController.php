@@ -379,6 +379,15 @@ class AdminController extends Controller
         return back();
     }
 
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|file|image|max:10240',
+        ]);
+        $path = $request->file('image')->store('images', 'public');
+        return response()->json(['url' => \Storage::disk('public')->url($path)]);
+    }
+
     public function uploadVideo(Request $request)
     {
         $request->validate([

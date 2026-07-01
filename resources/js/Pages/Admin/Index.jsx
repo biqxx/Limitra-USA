@@ -6,29 +6,17 @@ import { TAG_OPTS, ART_TAGS, ART_CATS, BADGES } from '../../constants';
 
 // ── Image helpers ────────────────────────────────────────────────────────────
 
-function fileToDataURL(file, max = 900) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > max || height > max) {
-          const r = Math.min(max / width, max / height);
-          width = Math.round(width * r);
-          height = Math.round(height * r);
-        }
-        const c = document.createElement('canvas');
-        c.width = width; c.height = height;
-        c.getContext('2d').drawImage(img, 0, 0, width, height);
-        resolve(c.toDataURL('image/jpeg', 0.82));
-      };
-      img.onerror = reject;
-      img.src = reader.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+async function uploadImageFile(file) {
+  const data = new FormData();
+  data.append('image', file);
+  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+  const res = await fetch('/admin/images/upload', {
+    method: 'POST',
+    headers: { 'X-CSRF-TOKEN': token },
+    body: data,
   });
+  if (!res.ok) throw new Error('Upload failed');
+  return (await res.json()).url;
 }
 
 function admSlug(s) {
@@ -40,11 +28,12 @@ function admSlug(s) {
 function ImageInput({ value, onChange }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   const pick = async (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
-    setBusy(true);
-    try { onChange(await fileToDataURL(f)); } catch (err) {}
+    setBusy(true); setUploadError(null);
+    try { onChange(await uploadImageFile(f)); } catch (err) { setUploadError('Upload failed — try again'); }
     setBusy(false);
     e.target.value = '';
   };
@@ -61,6 +50,7 @@ function ImageInput({ value, onChange }) {
           </button>
           {value && <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => onChange('')}>Remove</button>}
         </div>
+        {uploadError && <span style={{ color: 'var(--error, #c00)', fontSize: 12 }}>{uploadError}</span>}
         <input
           className="adm-input"
           placeholder="…or paste an image URL"
@@ -77,7 +67,7 @@ function GalleryInput({ items, onChange }) {
   const addFiles = async (e) => {
     const files = [...(e.target.files || [])];
     const urls = [];
-    for (const f of files) { try { urls.push(await fileToDataURL(f)); } catch (err) {} }
+    for (const f of files) { try { urls.push(await uploadImageFile(f)); } catch (err) {} }
     onChange([...items, ...urls]);
     e.target.value = '';
   };
@@ -105,7 +95,7 @@ function ImgInput({ value, onChange, label }) {
   const pick = async (e) => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
     setBusy(true);
-    try { onChange(await fileToDataURL(f)); } catch (err) {}
+    try { onChange(await uploadImageFile(f)); } catch (err) {}
     setBusy(false); e.target.value = '';
   };
   return (

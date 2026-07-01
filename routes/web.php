@@ -56,6 +56,7 @@ Route::middleware('admin')->group(function () {
     Route::put('/admin/looks/{id}', [AdminController::class, 'updateLook'])->name('admin.looks.update');
     Route::delete('/admin/looks/{id}', [AdminController::class, 'destroyLook'])->name('admin.looks.destroy');
 
+    Route::post('/admin/images/upload', [AdminController::class, 'uploadImage'])->name('admin.images.upload');
     Route::post('/admin/videos/upload', [AdminController::class, 'uploadVideo'])->name('admin.videos.upload');
     Route::post('/admin/videos', [AdminController::class, 'storeVideo'])->name('admin.videos.store');
     Route::put('/admin/videos/{id}', [AdminController::class, 'updateVideo'])->name('admin.videos.update');
