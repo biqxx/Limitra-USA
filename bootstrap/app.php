@@ -4,6 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -22,9 +23,26 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*'),
-        );
+        // Routes that return JSON (either api/* or admin upload endpoints)
+        $isJsonEndpoint = fn (Request $r) =>
+            $r->is('api/*') || $r->is('admin/*/upload') || $r->is('newsletter/*');
+
+        $exceptions->shouldRenderJsonWhen($isJsonEndpoint);
+
+        $exceptions->report(function (\Throwable $e) use ($isJsonEndpoint) {
+            $request = request();
+            if ($isJsonEndpoint($request)) {
+                Log::error('[API] ' . get_class($e) . ': ' . $e->getMessage(), [
+                    'path'   => $request->path(),
+                    'method' => $request->method(),
+                    'file'   => $e->getFile() . ':' . $e->getLine(),
+                    'trace'  => collect($e->getTrace())->take(5)->map(
+                        fn ($f) => ($f['file'] ?? '') . ':' . ($f['line'] ?? '')
+                    )->values()->all(),
+                ]);
+            }
+        });
+
         // Error page temporarily disabled — restore after debugging
         // $exceptions->respond(function (Response $response, \Throwable $e, Request $request) {
         //     if (! $request->is('api/*') && in_array($response->getStatusCode(), [404, 500, 503])) {

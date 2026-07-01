@@ -12,7 +12,7 @@ async function uploadImageFile(file) {
   const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
   const res = await fetch('/admin/images/upload', {
     method: 'POST',
-    headers: { 'X-CSRF-TOKEN': token },
+    headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
     body: data,
   });
   if (!res.ok) throw new Error('Upload failed');
@@ -1006,6 +1006,7 @@ function VideoEditor({ initial, products, onCancel, onSave }) {
     xhr.open('POST', '/admin/videos/upload');
     xhr.setRequestHeader('X-CSRF-TOKEN', csrf);
     xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.setRequestHeader('Accept', 'application/json');
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setUploadProgress(Math.round(e.loaded / e.total * 100));
     };
