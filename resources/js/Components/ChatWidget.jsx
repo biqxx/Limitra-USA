@@ -1,38 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import I from './Icons';
 
 const CHAT_STORAGE = "limitra.chat.history.v1";
 
-function buildSystemPrompt(catalog) {
-  const cats = (catalog || []).map((p) =>
-    `${p.name} (${p.category} > ${p.subcategory}, ${p.price})`
-  ).join("; ");
-
-  return `You are Limitra Assistant — a friendly, concise personal shopping guide for Limitra USA, a curated product discovery platform covering fashion, beauty, home, lifestyle and travel.
-
-Your job: help users discover products they'll love. When recommending, always name specific products from the catalog below so they can be surfaced as cards in the chat.
-
-CATALOG (name, category, price):
-${cats.slice(0, 3000)}
-
-RULES:
-- Recommend 2–4 specific products per reply by stating their EXACT name from the catalog.
-- Keep replies short (2–4 sentences + product list). No long paragraphs.
-- Always end with a brief follow-up question to refine the suggestion.
-- Never mention prices — users click through to discover them.
-- Tone: warm, editorial, knowledgeable — like a trusted style friend.
-- If asked something unrelated to shopping, gently steer back.`;
-}
-
-function extractProducts(text, catalog) {
-  if (!text || !catalog) return [];
-  const found = [];
-  catalog.forEach((p) => {
-    if (text.toLowerCase().includes(p.name.toLowerCase()) && !found.find((x) => x.id === p.id)) {
-      found.push(p);
-    }
-  });
-  return found.slice(0, 4);
+// Strip any incomplete <product:... tag at the tail (happens mid-stream before > arrives)
+function safeContent(text) {
+  return text.replace(/<product:[^>]*$/i, '');
 }
 
 function ChatProdCard({ p }) {
@@ -62,21 +35,40 @@ function TypingDots() {
 }
 
 function ChatMessage({ msg, catalog }) {
-  const products = useMemo(() => msg.role === "assistant" ? extractProducts(msg.content, catalog) : [], [msg.content, catalog]);
+  if (msg.role === "user") {
+    return (
+      <div className="chat-msg user">
+        <div className="chat-bubble">
+          {msg.content.split("\n").filter(Boolean).map((line, i) => (
+            <p key={i} style={{ margin: "0 0 4px" }}>{line}</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Split on complete <product:id> tags; strip any incomplete one at the end (mid-stream)
+  const parts = safeContent(msg.content).split(/<product:([a-z0-9_-]+)>/gi);
+
   return (
-    <div className={`chat-msg ${msg.role === "user" ? "user" : "ai"}`}>
-      {msg.role === "assistant" && (
-        <div className="chat-avatar"><span>L</span></div>
-      )}
+    <div className="chat-msg ai">
+      <div className="chat-avatar"><span>L</span></div>
       <div className="chat-bubble">
-        {msg.content.split("\n").filter(Boolean).map((line, i) => (
-          <p key={i} style={{ margin: "0 0 4px" }}>{line}</p>
-        ))}
-        {products.length > 0 && (
-          <div className="chat-prod-strip">
-            {products.map((p) => <ChatProdCard key={p.id} p={p} />)}
-          </div>
-        )}
+        {parts.map((part, i) => {
+          if (i % 2 === 0) {
+            // Text segment
+            return part.split("\n").filter(Boolean).map((line, j) => (
+              <p key={`t${i}-${j}`} style={{ margin: "0 0 5px" }}>{line}</p>
+            ));
+          }
+          // Product ID — look it up in the catalog and render the card
+          const product = catalog?.find((p) => p.id === part);
+          return product ? (
+            <div key={`p${i}`} className="chat-prod-inline">
+              <ChatProdCard p={product} />
+            </div>
+          ) : null;
+        })}
       </div>
     </div>
   );
@@ -120,25 +112,57 @@ function ChatPanel({ onClose, catalog }) {
     setInput(""); setError(null);
     const userMsg = { role: "user", content: q };
     const next = [...history, userMsg];
-    setHistory(next);
+    // Add an empty assistant message immediately — it fills in as chunks arrive
+    setHistory([...next, { role: "assistant", content: "" }]);
     setLoading(true);
     try {
+      // Strip empty/incomplete messages (can appear if a previous stream was interrupted)
+      // and truncate very long ones so validation never rejects them.
+      const payload = next
+        .filter((m) => m.content && m.content.trim())
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
+
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': getCsrfToken(),
-        },
-        body: JSON.stringify({
-          system: buildSystemPrompt(catalog),
-          messages: next.map((m) => ({ role: m.role, content: m.content })),
-        }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+        body: JSON.stringify({ messages: payload }),
       });
-      const data = await res.json();
-      const reply = data.content?.[0]?.text || "Sorry, I couldn't process that.";
-      setHistory([...next, { role: "assistant", content: reply }]);
+      if (!res.ok) { const d = await res.json(); throw new Error(d.message || d.error || 'Server error'); }
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf  = '';
+      let full = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';   // keep any incomplete trailing line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') break;
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed.error) throw new Error(parsed.error);
+            if (parsed.text) {
+              full += parsed.text;
+              setHistory((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: full };
+                return updated;
+              });
+            }
+          } catch (e) { /* skip malformed SSE lines */ }
+        }
+      }
     } catch (e) {
       setError("Couldn't reach the assistant. Please try again.");
+      setHistory(next);   // remove the empty assistant placeholder
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -184,7 +208,7 @@ function ChatPanel({ onClose, catalog }) {
         ) : (
           messages.map((msg, i) => <ChatMessage key={i} msg={msg} catalog={catalog} />)
         )}
-        {loading && <TypingDots />}
+        {loading && history.length > 0 && history[history.length - 1]?.content === '' && <TypingDots />}
         {error && <div className="chat-error">{error}</div>}
         <div ref={bottomRef}></div>
       </div>

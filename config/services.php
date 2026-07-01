@@ -39,4 +39,13 @@ return [
         'key' => env('ANTHROPIC_API_KEY'),
     ],
 
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+    ],
+
+    'ai' => [
+        // Switch to 'gemini' when going to production
+        'provider' => env('AI_PROVIDER', 'claude'),
+    ],
+
 ];

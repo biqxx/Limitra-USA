@@ -186,7 +186,9 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 }
 
 .nav-item:hover .mega,
-.nav-item:hover .mini-mega {
+.nav-item:hover .mini-mega,
+.nav-item.nav-open .mega,
+.nav-item.nav-open .mini-mega {
   display: block;
 }
 
@@ -724,11 +726,7 @@ section { padding-block: clamp(48px, 6vw, 84px); }
   width: 100%; padding: 14px 24px; font-size: 15px; font-weight: 500;
   background: none; border: none; cursor: pointer; text-align: left;
 }
-.mobile-nav-cat::after {
-  content: "›"; font-size: 18px; color: var(--muted);
-  transition: transform .25s ease;
-}
-.mobile-nav-cat.open::after { transform: rotate(90deg); }
+.mobile-nav-cat svg { color: var(--muted); flex: none; transition: transform .25s ease; }
 .mobile-nav-subs {
   background: #fafafa; padding: 8px 24px 12px 32px;
   display: flex; flex-direction: column; gap: 2px;
@@ -1689,6 +1687,7 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 
 /* inline product strip */
 .chat-prod-strip { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; border-top: 1px solid rgba(0,0,0,.08); padding-top: 10px; }
+.chat-prod-inline { margin: 6px 0; }
 .chat-prod-card { display: flex; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; text-decoration: none; transition: box-shadow .2s, transform .2s; }
 .chat-prod-card:hover { box-shadow: 0 8px 24px -12px rgba(20,25,40,.35); transform: translateY(-1px); }
 .cpc-img { width: 54px; height: 54px; background: var(--card); flex: none; position: relative; overflow: hidden; }

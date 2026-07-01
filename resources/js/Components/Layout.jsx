@@ -379,6 +379,8 @@ export function Header({ savedCount, onOpenSaved }) {
   const [signupOpen,   setSignupOpen]   = useState(false);
   const [mobileOpen,   setMobileOpen]   = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(null);
+  const [openNav, setOpenNav] = useState(null);
+  const navRef = useRef(null);
 
   useEffect(() => {
     if (hasSignedUp() || shownWithinCooldown(popupCooldownMs)) return;
@@ -397,18 +399,31 @@ export function Header({ savedCount, onOpenSaved }) {
     return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
   }, [mobileOpen]);
 
+  useEffect(() => {
+    if (!openNav) return;
+    const close = (e) => { if (navRef.current && !navRef.current.contains(e.target)) setOpenNav(null); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("touchstart", close); };
+  }, [openNav]);
+
   const miniWrap = { position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", zIndex: 200 };
   const megaWrap = { position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", zIndex: 200 };
+
+  const toggleNav = (key, href, e) => {
+    if (openNav !== key) { e.preventDefault(); setOpenNav(key); }
+    else setOpenNav(null);
+  };
 
   return (
     <header className="site-header" id="top">
       <div className="wrap header-row">
         <BrandMark />
 
-        <nav className="desktop-nav">
+        <nav className="desktop-nav" ref={navRef}>
           <ul className="main-nav">
-            <li className="nav-item" style={{ position: "relative", paddingBottom: 10 }}>
-              <Link className="nav-link" href="/collection/new">New Arrivals</Link>
+            <li className={"nav-item" + (openNav === 'new' ? ' nav-open' : '')} style={{ position: "relative", paddingBottom: 10 }} onMouseLeave={() => setOpenNav(null)}>
+              <Link className="nav-link" href="/collection/new" onClick={(e) => toggleNav('new', '/collection/new', e)}>New Arrivals</Link>
               <div style={miniWrap}>
                 <MiniDropdown
                   eyebrow={NAV_MINI_DATA.newArrivals.eyebrow}
@@ -421,8 +436,8 @@ export function Header({ savedCount, onOpenSaved }) {
               </div>
             </li>
             {cats.map((c) => (
-              <li className="nav-item" key={c.slug} style={{ position: "relative", paddingBottom: 10 }}>
-                <Link className="nav-link" href={`/category/${c.slug}`}>{c.name}</Link>
+              <li className={"nav-item" + (openNav === c.slug ? ' nav-open' : '')} key={c.slug} style={{ position: "relative", paddingBottom: 10 }} onMouseLeave={() => setOpenNav(null)}>
+                <Link className="nav-link" href={`/category/${c.slug}`} onClick={(e) => toggleNav(c.slug, `/category/${c.slug}`, e)}>{c.name}</Link>
                 <div style={megaWrap}>
                   <MegaDropdown
                     intro={{
@@ -449,8 +464,8 @@ export function Header({ savedCount, onOpenSaved }) {
                 </div>
               </li>
             ))}
-            <li className="nav-item" style={{ position: "relative", paddingBottom: 10 }}>
-              <Link className="nav-link" href="/collection/trending">Trending</Link>
+            <li className={"nav-item" + (openNav === 'trending' ? ' nav-open' : '')} style={{ position: "relative", paddingBottom: 10 }} onMouseLeave={() => setOpenNav(null)}>
+              <Link className="nav-link" href="/collection/trending" onClick={(e) => toggleNav('trending', '/collection/trending', e)}>Trending</Link>
               <div style={miniWrap}>
                 <MiniDropdown
                   eyebrow={NAV_MINI_DATA.trending.eyebrow}
@@ -460,8 +475,8 @@ export function Header({ savedCount, onOpenSaved }) {
                 />
               </div>
             </li>
-            <li className="nav-item" style={{ position: "relative", paddingBottom: 10 }}>
-              <Link className="nav-link" href="/guides">Guides</Link>
+            <li className={"nav-item" + (openNav === 'guides' ? ' nav-open' : '')} style={{ position: "relative", paddingBottom: 10 }} onMouseLeave={() => setOpenNav(null)}>
+              <Link className="nav-link" href="/guides" onClick={(e) => toggleNav('guides', '/guides', e)}>Guides</Link>
               <div style={miniWrap}>
                 <MiniDropdown
                   eyebrow={NAV_MINI_DATA.guides.eyebrow}
