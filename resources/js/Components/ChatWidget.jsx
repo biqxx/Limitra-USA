@@ -206,7 +206,7 @@ function ChatPanel({ onClose, catalog }) {
             </div>
           </div>
         ) : (
-          messages.map((msg, i) => <ChatMessage key={i} msg={msg} catalog={catalog} />)
+          messages.filter(m => m.content).map((msg, i) => <ChatMessage key={i} msg={msg} catalog={catalog} />)
         )}
         {loading && history.length > 0 && history[history.length - 1]?.content === '' && <TypingDots />}
         {error && <div className="chat-error">{error}</div>}

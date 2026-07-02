@@ -188,7 +188,6 @@ class ProductSeeder extends Seeder
                     $brand = $brands[$totalIndex % count($brands)];
                     $retailer = $retailers[$totalIndex % count($retailers)];
                     $rating = round(4.4 + (($ci * 7) % 6) * 0.1, 1);
-                    $reviews = 46 + (($totalIndex * 37) % 280);
                     $badge = $badgePool[$totalIndex % count($badgePool)];
                     $price = $prices[$ci % count($prices)];
 
@@ -244,7 +243,7 @@ class ProductSeeder extends Seeder
             }
         }
 
-        // ---- DETAILS (product_details + product_reviews) ----
+        // ---- DETAILS (product_details) ----
         $details = [
             'leather-shoulder-bag' => [
                 'about' => [
@@ -254,37 +253,11 @@ class ProductSeeder extends Seeder
                 ],
                 'highlights' => ["Cut from a single hide for an uninterrupted grain", "Polished gold-tone hardware that won't tarnish", "Holds a 13\" tablet without losing its shape"],
                 'specs' => [["Material", "Full-grain Italian calf leather"], ["Dimensions", "28 × 20 × 11 cm"], ["Hardware", "Gold-tone, adjustable strap (52–60 cm)"], ["Lining", "Suede, 1 zip + 1 slip pocket"], ["Made in", "Florence, Italy"]],
-                'reviews' => [
-                    ['name' => 'Amara O.', 'rating' => 5, 'date' => 'May 2026', 'title' => 'Worth every penny', 'body' => "The leather is unbelievably soft and the gold hardware feels substantial. I've used it daily for a month and it still looks brand new.", 'verified' => true],
-                    ['name' => 'Priya S.', 'rating' => 5, 'date' => 'Apr 2026', 'title' => 'My new everyday bag', 'body' => "Fits my tablet, wallet and a small umbrella with room to spare. The strap length is perfect for layering over a coat.", 'verified' => true],
-                    ['name' => 'Nadia K.', 'rating' => 4, 'date' => 'Mar 2026', 'title' => 'Beautiful, slightly stiff at first', 'body' => "Took a week of use to soften up but now it's perfect. The suede lining is a lovely touch.", 'verified' => false],
-                ],
             ],
-            'chronograph-watch' => [
-                'reviews' => [
-                    ['name' => 'Daniel R.', 'rating' => 5, 'date' => 'May 2026', 'title' => 'Punches well above its price', 'body' => "The sunburst navy dial is gorgeous in daylight. Keeps perfect time and the bracelet sizing was easy.", 'verified' => true],
-                    ['name' => 'Marcus T.', 'rating' => 4, 'date' => 'Apr 2026', 'title' => 'Great daily wearer', 'body' => "Solid build, comfortable on the wrist. Wish the lume were a touch brighter, but no real complaints.", 'verified' => true],
-                ],
-            ],
-            'iconic-sunglasses' => [
-                'reviews' => [
-                    ['name' => 'Lena M.', 'rating' => 5, 'date' => 'May 2026', 'title' => 'Instant classic', 'body' => "These go with everything and the polarized lenses are a genuine upgrade. The case is lovely too.", 'verified' => true],
-                    ['name' => 'Sofia D.', 'rating' => 5, 'date' => 'Apr 2026', 'title' => 'So flattering', 'body' => "Suits a round face really well. Lightweight enough that I forget I'm wearing them.", 'verified' => true],
-                    ['name' => 'Hannah B.', 'rating' => 4, 'date' => 'Feb 2026', 'title' => 'Lovely, run slightly large', 'body' => "Gorgeous frame — just a hair wide for me, but the gold detail is stunning.", 'verified' => false],
-                ],
-            ],
-            'floral-maxi-dress' => [
-                'reviews' => [
-                    ['name' => 'Chloe W.', 'rating' => 5, 'date' => 'May 2026', 'title' => 'Made for vacation', 'body' => "The chiffon moves beautifully and it photographs like a dream at sunset. Pockets are a bonus!", 'verified' => true],
-                    ['name' => 'Isabel F.', 'rating' => 4, 'date' => 'Apr 2026', 'title' => 'Stunning, size up', 'body' => "Runs a little snug at the bust — sized up and it's perfect. Such a flattering tiered skirt.", 'verified' => true],
-                ],
-            ],
-            'eau-de-parfum' => [
-                'reviews' => [
-                    ['name' => 'Grace L.', 'rating' => 5, 'date' => 'May 2026', 'title' => 'My signature now', 'body' => "Warm, golden and lasts all day without being heavy. I get compliments every time I wear it.", 'verified' => true],
-                    ['name' => 'Olivia P.', 'rating' => 5, 'date' => 'Mar 2026', 'title' => 'Bottled summer', 'body' => "The neroli opening is divine and it dries down to the coziest vanilla. Refillable flacon is a thoughtful touch.", 'verified' => true],
-                ],
-            ],
+            'chronograph-watch' => [],
+            'iconic-sunglasses' => [],
+            'floral-maxi-dress' => [],
+            'eau-de-parfum' => [],
         ];
 
         foreach ($details as $productId => $detail) {
