@@ -25,7 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         // Routes that return JSON (either api/* or admin upload endpoints)
         $isJsonEndpoint = fn (Request $r) =>
-            $r->is('api/*') || $r->is('admin/*/upload') || $r->is('newsletter/*');
+            $r->is('api/*') || $r->is('admin/*/upload') || $r->is('admin/*/bulk-import') || $r->is('newsletter/*');
 
         $exceptions->shouldRenderJsonWhen($isJsonEndpoint);
 
@@ -43,8 +43,8 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->respond(function (Response $response, \Throwable $e, Request $request) {
-            if (! $request->is('api/*') && in_array($response->getStatusCode(), [404, 500, 503])) {
+        $exceptions->respond(function (Response $response, \Throwable $e, Request $request) use ($isJsonEndpoint) {
+            if (! $isJsonEndpoint($request) && in_array($response->getStatusCode(), [404, 500, 503])) {
                 return Inertia::render('Error', [
                     'status' => $response->getStatusCode(),
                 ])->toResponse($request)->setStatusCode($response->getStatusCode());

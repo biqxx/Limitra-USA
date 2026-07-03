@@ -41,26 +41,31 @@ Route::middleware('admin')->group(function () {
     Route::post('/admin/products', [AdminController::class, 'storeProduct'])->name('admin.products.store');
     Route::put('/admin/products/{id}', [AdminController::class, 'updateProduct'])->name('admin.products.update');
     Route::delete('/admin/products/{id}', [AdminController::class, 'destroyProduct'])->name('admin.products.destroy');
+    Route::post('/admin/products/bulk-import', [AdminController::class, 'bulkImportProducts'])->name('admin.products.bulk');
 
     Route::put('/admin/categories/{id}', [AdminController::class, 'updateCategory'])->name('admin.categories.update');
 
     Route::post('/admin/occasions', [AdminController::class, 'storeOccasion'])->name('admin.occasions.store');
     Route::put('/admin/occasions/{id}', [AdminController::class, 'updateOccasion'])->name('admin.occasions.update');
     Route::delete('/admin/occasions/{id}', [AdminController::class, 'destroyOccasion'])->name('admin.occasions.destroy');
+    Route::post('/admin/occasions/bulk-import', [AdminController::class, 'bulkImportOccasions'])->name('admin.occasions.bulk');
 
     Route::post('/admin/articles', [AdminController::class, 'storeArticle'])->name('admin.articles.store');
     Route::put('/admin/articles/{id}', [AdminController::class, 'updateArticle'])->name('admin.articles.update');
     Route::delete('/admin/articles/{id}', [AdminController::class, 'destroyArticle'])->name('admin.articles.destroy');
+    Route::post('/admin/articles/bulk-import', [AdminController::class, 'bulkImportArticles'])->name('admin.articles.bulk');
 
     Route::post('/admin/looks', [AdminController::class, 'storeLook'])->name('admin.looks.store');
     Route::put('/admin/looks/{id}', [AdminController::class, 'updateLook'])->name('admin.looks.update');
     Route::delete('/admin/looks/{id}', [AdminController::class, 'destroyLook'])->name('admin.looks.destroy');
+    Route::post('/admin/looks/bulk-import', [AdminController::class, 'bulkImportLooks'])->name('admin.looks.bulk');
 
     Route::post('/admin/images/upload', [AdminController::class, 'uploadImage'])->name('admin.images.upload');
     Route::post('/admin/videos/upload', [AdminController::class, 'uploadVideo'])->name('admin.videos.upload');
     Route::post('/admin/videos', [AdminController::class, 'storeVideo'])->name('admin.videos.store');
     Route::put('/admin/videos/{id}', [AdminController::class, 'updateVideo'])->name('admin.videos.update');
     Route::delete('/admin/videos/{id}', [AdminController::class, 'destroyVideo'])->name('admin.videos.destroy');
+    Route::post('/admin/videos/bulk-import', [AdminController::class, 'bulkImportVideos'])->name('admin.videos.bulk');
 
     Route::put('/admin/settings', [AdminController::class, 'updateSettings'])->name('admin.settings.update');
 });

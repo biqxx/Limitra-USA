@@ -12,6 +12,7 @@ use App\Models\SiteSetting;
 use App\Models\Subcategory;
 use App\Models\Video;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -173,6 +174,85 @@ class AdminController extends Controller
         return back();
     }
 
+    public function bulkImportProducts(Request $request)
+    {
+        $created = 0; $updated = 0; $skipped = 0; $errors = [];
+
+        DB::transaction(function () use ($request, &$created, &$updated, &$skipped, &$errors) {
+            foreach ($request->input('items', []) as $i => $item) {
+                $action = $item['action'] ?? 'skip';
+                if ($action === 'skip') { $skipped++; continue; }
+                $data = $item['data'] ?? [];
+
+                try {
+                    $category = Category::where('name', $data['category'] ?? null)->first();
+                    $subcategory = $category && !empty($data['subcategory'])
+                        ? Subcategory::where('category_id', $category->id)->where('name', $data['subcategory'])->first()
+                        : null;
+
+                    if ($action === 'update' && !empty($item['id'])) {
+                        $product = Product::findOrFail($item['id']);
+                        $product->update([
+                            'name' => ($data['name'] ?? null) ?: $product->name,
+                            'brand' => ($data['brand'] ?? null) ?: $product->brand,
+                            'price' => ($data['price'] ?? null) ?: $product->price,
+                            'category_id' => $category?->id ?? $product->category_id,
+                            'subcategory_id' => $subcategory?->id ?? $product->subcategory_id,
+                            'retailer' => $data['retailer'] ?? $product->retailer,
+                            'affiliate_url' => $data['affiliateUrl'] ?? $product->affiliate_url,
+                            'image' => ($data['image'] ?? null) ?: $product->image,
+                            'description' => ($data['description'] ?? null) ?: $product->description,
+                            'badge' => ($data['badge'] ?? '') !== '' ? $data['badge'] : null,
+                            'rating' => ($data['rating'] ?? '') !== '' ? min(5, max(0, (float) $data['rating'])) : $product->rating,
+                            'is_featured' => (bool) ($data['is_featured'] ?? $product->is_featured),
+                            'is_resort' => (bool) ($data['is_resort'] ?? $product->is_resort),
+                            'is_new' => (bool) ($data['is_new'] ?? $product->is_new),
+                            'features' => !empty($data['highlights']) ? $this->cleanArray($data['highlights']) : $product->features,
+                        ]);
+                        $id = $product->id;
+                        $updated++;
+                    } else {
+                        $id = !empty($data['id']) ? Str::slug($data['id']) : Str::slug($data['name'] ?? Str::random(8));
+                        if (Product::where('id', $id)->exists()) {
+                            $id = $id . '-' . substr(md5(($data['name'] ?? '') . microtime() . $i), 0, 6);
+                        }
+                        Product::create([
+                            'id' => $id,
+                            'name' => $data['name'] ?? 'Untitled product',
+                            'brand' => ($data['brand'] ?? null) ?: 'Limitra Select',
+                            'price' => $data['price'] ?? '',
+                            'category_id' => $category?->id,
+                            'subcategory_id' => $subcategory?->id,
+                            'retailer' => $data['retailer'] ?? null,
+                            'affiliate_url' => $data['affiliateUrl'] ?? null,
+                            'image' => $data['image'] ?? null,
+                            'description' => ($data['description'] ?? null) ?: (($data['name'] ?? 'Product') . ' — a Limitra-curated pick.'),
+                            'badge' => $data['badge'] ?? null,
+                            'rating' => ($data['rating'] ?? '') !== '' ? min(5, max(0, (float) $data['rating'])) : 4.8,
+                            'is_featured' => (bool) ($data['is_featured'] ?? false),
+                            'is_resort' => (bool) ($data['is_resort'] ?? false),
+                            'is_new' => (bool) ($data['is_new'] ?? false),
+                            'features' => $this->cleanArray($data['highlights'] ?? []),
+                            'slot' => $id,
+                        ]);
+                        $created++;
+                    }
+
+                    $about = $this->cleanArray($data['about'] ?? []);
+                    $highlights = $this->cleanArray($data['highlights'] ?? []);
+                    $specs = $this->cleanSpecs($data['specs'] ?? []);
+                    if ($about || $highlights || $specs) {
+                        ProductDetail::updateOrCreate(['product_id' => $id], compact('about', 'highlights', 'specs'));
+                    }
+                } catch (\Throwable $e) {
+                    $errors[] = ['row' => $i, 'message' => $e->getMessage()];
+                }
+            }
+        });
+
+        return response()->json(compact('created', 'updated', 'skipped', 'errors'));
+    }
+
     // ── Categories ────────────────────────────────────────────
 
     public function updateCategory(Request $request, int $id)
@@ -255,6 +335,59 @@ class AdminController extends Controller
         return back();
     }
 
+    public function bulkImportOccasions(Request $request)
+    {
+        $created = 0; $updated = 0; $skipped = 0; $errors = [];
+
+        DB::transaction(function () use ($request, &$created, &$updated, &$skipped, &$errors) {
+            foreach ($request->input('items', []) as $i => $item) {
+                $action = $item['action'] ?? 'skip';
+                if ($action === 'skip') { $skipped++; continue; }
+                $data = $item['data'] ?? [];
+
+                try {
+                    if ((bool) ($data['is_hero'] ?? false)) {
+                        Occasion::where('is_hero', true)->when(!empty($item['id']), fn ($q) => $q->where('id', '!=', $item['id']))->update(['is_hero' => false]);
+                    }
+
+                    if ($action === 'update' && !empty($item['id'])) {
+                        $occasion = Occasion::findOrFail($item['id']);
+                        $occasion->update([
+                            'title' => ($data['title'] ?? null) ?: $occasion->title,
+                            'eyebrow' => $data['eyebrow'] ?? $occasion->eyebrow,
+                            'tagline' => $data['tagline'] ?? $occasion->tagline,
+                            'badge' => $data['badge'] ?? $occasion->badge,
+                            'img' => ($data['img'] ?? null) ?: $occasion->img,
+                            'link' => $data['link'] ?? $occasion->link,
+                            'featured' => (bool) ($data['featured'] ?? $occasion->featured),
+                            'is_hero' => (bool) ($data['is_hero'] ?? $occasion->is_hero),
+                        ]);
+                        $updated++;
+                    } else {
+                        Occasion::create([
+                            'key' => ($data['key'] ?? null) ?: Str::slug($data['title'] ?? Str::random(8)),
+                            'title' => $data['title'] ?? 'Untitled occasion',
+                            'eyebrow' => $data['eyebrow'] ?? null,
+                            'tagline' => $data['tagline'] ?? null,
+                            'badge' => $data['badge'] ?? null,
+                            'img' => $data['img'] ?? null,
+                            'link' => $data['link'] ?? null,
+                            'featured' => (bool) ($data['featured'] ?? false),
+                            'is_hero' => (bool) ($data['is_hero'] ?? false),
+                            'color' => '#16357a',
+                            'accent' => '#cf8a32',
+                        ]);
+                        $created++;
+                    }
+                } catch (\Throwable $e) {
+                    $errors[] = ['row' => $i, 'message' => $e->getMessage()];
+                }
+            }
+        });
+
+        return response()->json(compact('created', 'updated', 'skipped', 'errors'));
+    }
+
     // ── Articles ──────────────────────────────────────────────
 
     public function storeArticle(Request $request)
@@ -299,6 +432,57 @@ class AdminController extends Controller
         return back();
     }
 
+    public function bulkImportArticles(Request $request)
+    {
+        $created = 0; $updated = 0; $skipped = 0; $errors = [];
+
+        DB::transaction(function () use ($request, &$created, &$updated, &$skipped, &$errors) {
+            foreach ($request->input('items', []) as $i => $item) {
+                $action = $item['action'] ?? 'skip';
+                if ($action === 'skip') { $skipped++; continue; }
+                $data = $item['data'] ?? [];
+
+                try {
+                    if ($action === 'update' && !empty($item['id'])) {
+                        // Body content is left untouched on bulk update — it's rich, block-based content that doesn't round-trip through a CSV row.
+                        $article = Article::findOrFail($item['id']);
+                        $article->update([
+                            'tag' => ($data['tag'] ?? null) ?: $article->tag,
+                            'category' => ($data['category'] ?? null) ?: $article->category,
+                            'title' => ($data['title'] ?? null) ?: $article->title,
+                            'excerpt' => $data['excerpt'] ?? $article->excerpt,
+                            'img' => ($data['img'] ?? null) ?: $article->img,
+                            'date' => ($data['date'] ?? null) ?: $article->date,
+                            'author' => ($data['author'] ?? null) ?: $article->author,
+                            'read_time' => ($data['readTime'] ?? null) ?: $article->read_time,
+                            'featured' => (bool) ($data['featured'] ?? $article->featured),
+                        ]);
+                        $updated++;
+                    } else {
+                        Article::create([
+                            'slug' => ($data['slug'] ?? null) ?: Str::slug($data['title'] ?? Str::random(8)),
+                            'tag' => ($data['tag'] ?? null) ?: 'Fashion',
+                            'category' => ($data['category'] ?? null) ?: 'Women',
+                            'title' => $data['title'] ?? 'Untitled article',
+                            'excerpt' => $data['excerpt'] ?? '',
+                            'img' => $data['img'] ?? null,
+                            'date' => ($data['date'] ?? null) ?: now()->format('F j, Y'),
+                            'author' => ($data['author'] ?? null) ?: 'Limitra Editors',
+                            'read_time' => ($data['readTime'] ?? null) ?: '5 min',
+                            'featured' => (bool) ($data['featured'] ?? false),
+                            'body' => !empty($data['excerpt']) ? [['type' => 'lead', 'text' => $data['excerpt']]] : [],
+                        ]);
+                        $created++;
+                    }
+                } catch (\Throwable $e) {
+                    $errors[] = ['row' => $i, 'message' => $e->getMessage()];
+                }
+            }
+        });
+
+        return response()->json(compact('created', 'updated', 'skipped', 'errors'));
+    }
+
     // ── Looks ─────────────────────────────────────────────────
 
     public function storeLook(Request $request)
@@ -335,6 +519,50 @@ class AdminController extends Controller
     {
         Look::findOrFail($id)->delete();
         return back();
+    }
+
+    public function bulkImportLooks(Request $request)
+    {
+        $created = 0; $updated = 0; $skipped = 0; $errors = [];
+
+        DB::transaction(function () use ($request, &$created, &$updated, &$skipped, &$errors) {
+            foreach ($request->input('items', []) as $i => $item) {
+                $action = $item['action'] ?? 'skip';
+                if ($action === 'skip') { $skipped++; continue; }
+                $data = $item['data'] ?? [];
+
+                try {
+                    if ($action === 'update' && !empty($item['id'])) {
+                        // Grid items / attached products are left untouched on bulk update — they're built visually, not via CSV.
+                        $look = Look::findOrFail($item['id']);
+                        $look->update([
+                            'event' => ($data['event'] ?? null) ?: $look->event,
+                            'tags' => !empty($data['tags']) ? $data['tags'] : $look->tags,
+                            'hero_img' => ($data['heroImg'] ?? null) ?: $look->hero_img,
+                            'style_notes' => $data['styleNotes'] ?? $look->style_notes,
+                            'palette' => !empty($data['palette']) ? $data['palette'] : $look->palette,
+                        ]);
+                        $updated++;
+                    } else {
+                        Look::create([
+                            'slug' => ($data['slug'] ?? null) ?: Str::slug($data['event'] ?? Str::random(8)),
+                            'event' => $data['event'] ?? 'Untitled look',
+                            'tags' => $data['tags'] ?? [],
+                            'hero_img' => $data['heroImg'] ?? null,
+                            'style_notes' => $data['styleNotes'] ?? null,
+                            'palette' => $data['palette'] ?? [],
+                            'grid_items' => [],
+                            'products' => [],
+                        ]);
+                        $created++;
+                    }
+                } catch (\Throwable $e) {
+                    $errors[] = ['row' => $i, 'message' => $e->getMessage()];
+                }
+            }
+        });
+
+        return response()->json(compact('created', 'updated', 'skipped', 'errors'));
     }
 
     // ── Videos ────────────────────────────────────────────────
@@ -377,6 +605,53 @@ class AdminController extends Controller
     {
         Video::findOrFail($id)->delete();
         return back();
+    }
+
+    public function bulkImportVideos(Request $request)
+    {
+        $created = 0; $updated = 0; $skipped = 0; $errors = [];
+
+        DB::transaction(function () use ($request, &$created, &$updated, &$skipped, &$errors) {
+            foreach ($request->input('items', []) as $i => $item) {
+                $action = $item['action'] ?? 'skip';
+                if ($action === 'skip') { $skipped++; continue; }
+                $data = $item['data'] ?? [];
+
+                try {
+                    if ($action === 'update' && !empty($item['id'])) {
+                        $video = Video::findOrFail($item['id']);
+                        $video->update([
+                            'title' => ($data['title'] ?? null) ?: $video->title,
+                            'tag' => ($data['tag'] ?? null) ?: $video->tag,
+                            'thumb' => ($data['thumb'] ?? null) ?: $video->thumb,
+                            'youtube' => ($data['youtube'] ?? null) ?: $video->youtube,
+                            'video_url' => ($data['video_url'] ?? null) ?: $video->video_url,
+                            'duration' => $data['duration'] ?? $video->duration,
+                            'products' => !empty($data['products']) ? $data['products'] : $video->products,
+                        ]);
+                        $updated++;
+                    } else {
+                        $maxOrder = Video::max('sort_order') ?? 0;
+                        Video::create([
+                            'vid_id' => 'v-' . Str::random(8),
+                            'title' => $data['title'] ?? 'Untitled video',
+                            'tag' => ($data['tag'] ?? null) ?: 'Fashion',
+                            'thumb' => $data['thumb'] ?? null,
+                            'youtube' => $data['youtube'] ?? null,
+                            'video_url' => $data['video_url'] ?? null,
+                            'duration' => $data['duration'] ?? null,
+                            'products' => $data['products'] ?? [],
+                            'sort_order' => $maxOrder + 1,
+                        ]);
+                        $created++;
+                    }
+                } catch (\Throwable $e) {
+                    $errors[] = ['row' => $i, 'message' => $e->getMessage()];
+                }
+            }
+        });
+
+        return response()->json(compact('created', 'updated', 'skipped', 'errors'));
     }
 
     public function uploadImage(Request $request)

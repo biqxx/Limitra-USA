@@ -134,6 +134,201 @@ function GalleryInput({ items, onChange, onBusyChange }) {
   );
 }
 
+// ── Bulk CSV import ────────────────────────────────────────────────────────────
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  const pushField = () => { row.push(field); field = ''; };
+  const pushRow = () => { pushField(); rows.push(row); row = []; };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], next = text[i + 1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') { field += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { field += c; }
+    } else if (c === '"') { inQuotes = true; }
+    else if (c === ',') { pushField(); }
+    else if (c === '\r') { /* skip — \n follows */ }
+    else if (c === '\n') { pushRow(); }
+    else { field += c; }
+  }
+  if (field.length || row.length) pushRow();
+  while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === '') rows.pop();
+  if (!rows.length) return [];
+  const headers = rows[0].map((h) => h.trim());
+  return rows.slice(1)
+    .filter((r) => r.some((c) => c.trim() !== ''))
+    .map((r) => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = (r[i] ?? '').trim(); });
+      return obj;
+    });
+}
+
+function csvCell(v) {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function downloadCSV(filename, headers, rows) {
+  const lines = [headers.join(','), ...rows.map((r) => headers.map((h) => csvCell(r[h])).join(','))];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function splitList(s) {
+  return String(s || '').split('|').map((x) => x.trim()).filter(Boolean);
+}
+
+function toBool(s) {
+  return ['true', '1', 'yes', 'y'].includes(String(s || '').trim().toLowerCase());
+}
+
+async function postJSON(url, body) {
+  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 419) throw new SessionExpiredError('Session expired');
+  if (!res.ok) throw new Error('Import failed');
+  return res.json();
+}
+
+function bulkResultMessage(result) {
+  const parts = [];
+  if (result.created) parts.push(`${result.created} created`);
+  if (result.updated) parts.push(`${result.updated} updated`);
+  if (result.skipped) parts.push(`${result.skipped} skipped`);
+  let msg = (parts.length ? parts.join(', ') : 'Nothing imported') + '.';
+  if (result.errors && result.errors.length) msg += ` ${result.errors.length} row${result.errors.length === 1 ? '' : 's'} failed.`;
+  return msg;
+}
+
+// A generic bulk-CSV importer: parses the file, matches each row against existing
+// items, and lets the admin resolve every match as Update or Skip before anything
+// is sent to the server. `existing` items with `decision: 'skip'` are left alone —
+// nothing is ever deleted by an import.
+function BulkImportButton({ label, headers, sample, existing, parseRow, matchExisting, getId, summarize, importUrl, onDone }) {
+  const fileRef = useRef(null);
+  const [rows, setRows] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null);
+    try {
+      const text = await file.text();
+      const parsed = parseCSV(text);
+      if (!parsed.length) { setError('That CSV has no data rows.'); return; }
+      setRows(parsed.map((raw, i) => {
+        const data = parseRow(raw);
+        const match = matchExisting(raw, data, existing) || null;
+        return { i, raw, data, match, decision: match ? 'skip' : 'create' };
+      }));
+    } catch (err) {
+      setError('Could not read that file — make sure it’s a valid CSV.');
+    }
+  };
+
+  const setDecision = (i, decision) => setRows((rs) => rs.map((r) => (r.i === i ? { ...r, decision } : r)));
+
+  const submit = async () => {
+    setSubmitting(true); setError(null);
+    const items = rows
+      .filter((r) => r.decision !== 'skip')
+      .map((r) => ({ action: r.decision, id: r.match ? getId(r.match) : null, data: r.data }));
+    try {
+      const result = await postJSON(importUrl, { items });
+      setSubmitting(false);
+      setRows(null);
+      onDone(result);
+    } catch (err) {
+      setSubmitting(false);
+      setError(err instanceof SessionExpiredError
+        ? 'Your session has expired — please reload the page and try again.'
+        : 'Import failed — try again.');
+    }
+  };
+
+  const counts = rows ? {
+    create: rows.filter((r) => r.decision === 'create').length,
+    update: rows.filter((r) => r.decision === 'update').length,
+    skip: rows.filter((r) => r.decision === 'skip').length,
+  } : null;
+
+  return (
+    <>
+      <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={onFile} />
+      <button type="button" className="adm-btn adm-btn-ghost" onClick={() => fileRef.current.click()}>
+        <I.upload /> Bulk import CSV
+      </button>
+      <button type="button" className="adm-btn adm-btn-ghost" onClick={() => downloadCSV(`${label}-template.csv`, headers, [sample])}>
+        Template
+      </button>
+      {error && !rows && <span style={{ color: 'var(--error, #c00)', fontSize: 12, marginLeft: 4, alignSelf: 'center' }}>{error}</span>}
+
+      {rows && (
+        <div className="adm-overlay" onMouseDown={() => !submitting && setRows(null)}>
+          <div className="adm-modal" style={{ width: 'min(900px,98vw)' }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="adm-modal-head">
+              <h2>Bulk import — {label}</h2>
+              <button className="adm-close" onClick={() => setRows(null)} disabled={submitting}><I.close /></button>
+            </div>
+            <div className="adm-modal-body">
+              <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 0 }}>
+                {rows.length} row{rows.length === 1 ? '' : 's'} found. Rows that matched an existing item default to <strong>Skip</strong> — set them to <strong>Update existing</strong> to overwrite that item. Nothing is deleted by an import.
+              </p>
+              <div style={{ maxHeight: 380, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                <table className="adm-table">
+                  <thead><tr><th>#</th><th>Item</th><th>Status</th><th>Action</th></tr></thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.i}>
+                        <td>{r.i + 1}</td>
+                        <td>{summarize(r.data, r.match)}</td>
+                        <td>
+                          {r.match
+                            ? <span className="adm-tag cat">Matches existing</span>
+                            : <span className="adm-tag yours">New</span>}
+                        </td>
+                        <td>
+                          <select className="adm-select" style={{ fontSize: 12.5 }} value={r.decision} onChange={(e) => setDecision(r.i, e.target.value)}>
+                            {r.match
+                              ? [<option key="skip" value="skip">Skip</option>, <option key="update" value="update">Update existing</option>]
+                              : [<option key="create" value="create">Create</option>, <option key="skip" value="skip">Skip</option>]}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {error && <div style={{ color: 'var(--error, #c00)', fontSize: 13, marginTop: 10 }}>{error}</div>}
+            </div>
+            <div className="adm-form-foot">
+              <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>{counts.create} to create · {counts.update} to update · {counts.skip} skipped</span>
+              <span className="spacer"></span>
+              <button type="button" className="adm-btn adm-btn-ghost" onClick={() => setRows(null)} disabled={submitting}>Cancel</button>
+              <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={submitting || (counts.create === 0 && counts.update === 0)}>
+                <I.check /> {submitting ? 'Importing…' : `Import ${counts.create + counts.update} item${counts.create + counts.update === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Repeater / Specs ─────────────────────────────────────────────────────────
 
 function Repeater({ items, onChange, placeholder, textarea }) {
@@ -432,7 +627,7 @@ function Dashboard({ products, settings, onAdd, onGo }) {
 
 // ── Products list ─────────────────────────────────────────────────────────────
 
-function ProductsView({ products, categories, onAdd, onEdit, onDelete }) {
+function ProductsView({ products, categories, onAdd, onEdit, onDelete, onToast }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('All');
   const cats = ['All', ...categories.map((c) => c.name)];
@@ -449,7 +644,37 @@ function ProductsView({ products, categories, onAdd, onEdit, onDelete }) {
           <h1>Products</h1>
           <p>{products.length} product{products.length === 1 ? '' : 's'} in your affiliate catalog.</p>
         </div>
-        <button className="adm-btn adm-btn-primary" onClick={onAdd}><I.plus /> Add product</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <BulkImportButton
+            label="products"
+            headers={['id', 'name', 'brand', 'category', 'subcategory', 'price', 'retailer', 'affiliate_url', 'image', 'badge', 'rating', 'description', 'is_featured', 'is_resort', 'is_new', 'highlights', 'about', 'specs']}
+            sample={{
+              id: 'quilted-leather-crossbody', name: 'Quilted Leather Crossbody', brand: 'Maison Vale',
+              category: categories[0]?.name || 'Bags', subcategory: categories[0]?.subs?.[0] || '', price: '280',
+              retailer: 'Net-a-Porter', affiliate_url: 'https://retailer.com/product?aff=limitra',
+              image: 'https://example.com/image.jpg', badge: 'New', rating: '4.8',
+              description: 'A refined leather crossbody for everyday polish.',
+              is_featured: 'TRUE', is_resort: 'FALSE', is_new: 'TRUE',
+              highlights: 'Full-grain leather|Adjustable strap', about: 'Handcrafted in Italy.|Lined interior with zip pocket.',
+              specs: 'Material:Leather;Origin:Italy',
+            }}
+            existing={products}
+            parseRow={(raw) => ({
+              id: raw.id, name: raw.name, brand: raw.brand, category: raw.category, subcategory: raw.subcategory,
+              price: raw.price, retailer: raw.retailer, affiliateUrl: raw.affiliate_url, image: raw.image,
+              badge: raw.badge, rating: raw.rating, description: raw.description,
+              is_featured: toBool(raw.is_featured), is_resort: toBool(raw.is_resort), is_new: toBool(raw.is_new),
+              highlights: splitList(raw.highlights), about: splitList(raw.about),
+              specs: String(raw.specs || '').split(';').map((s) => s.trim()).filter(Boolean).map((pair) => pair.split(':').map((x) => x.trim())),
+            })}
+            matchExisting={(raw, data, existing) => (data.id ? existing.find((p) => p.id === admSlug(data.id)) : null)}
+            getId={(p) => p.id}
+            summarize={(data, match) => `${data.name || '(no name)'}${match ? ' → updates “' + match.name + '”' : ''}`}
+            importUrl="/admin/products/bulk-import"
+            onDone={(result) => { onToast(bulkResultMessage(result)); router.reload({ only: ['products'] }); }}
+          />
+          <button className="adm-btn adm-btn-primary" onClick={onAdd}><I.plus /> Add product</button>
+        </div>
       </div>
 
       {products.length === 0 ? (
@@ -701,7 +926,30 @@ function LooksView({ looks, products, onToast }) {
     <>
       <div className="adm-head">
         <div><h1>Style the Look</h1><p>Create curated outfit galleries with a custom image grid.</p></div>
-        <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> New look</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <BulkImportButton
+            label="looks"
+            headers={['slug', 'event', 'tags', 'hero_img', 'style_notes', 'palette']}
+            sample={{
+              slug: 'evening-elegance', event: 'Evening Elegance', tags: 'Colorful, Playful Luxury',
+              hero_img: 'https://example.com/hero.jpg', style_notes: 'Editorial notes shown at the bottom of the look.',
+              palette: '#1a2744, #cf8a32, #f8f6f1',
+            }}
+            existing={looks}
+            parseRow={(raw) => ({
+              slug: raw.slug, event: raw.event,
+              tags: String(raw.tags || '').split(',').map((t) => t.trim()).filter(Boolean),
+              heroImg: raw.hero_img, styleNotes: raw.style_notes,
+              palette: String(raw.palette || '').split(',').map((p) => p.trim()).filter(Boolean),
+            })}
+            matchExisting={(raw, data, existing) => (data.slug ? existing.find((l) => l.slug === admSlug(data.slug)) : null)}
+            getId={(l) => l.id}
+            summarize={(data, match) => `${data.event || '(no event name)'}${match ? ' → updates “' + match.event + '”' : ''}`}
+            importUrl="/admin/looks/bulk-import"
+            onDone={(result) => { onToast(bulkResultMessage(result)); router.reload({ only: ['looks'] }); }}
+          />
+          <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> New look</button>
+        </div>
       </div>
       {looks.length === 0 ? (
         <div className="adm-panel"><div className="adm-empty"><I.image width="42" height="42" /><h3>No looks yet</h3><p>Create your first curated outfit look.</p>
@@ -905,7 +1153,27 @@ function VideosAdminView({ videos, products, onToast }) {
   return (
     <>
       <div className="adm-head"><div><h1>Videos</h1><p>{videos.length} videos across the platform.</p></div>
-        <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> Add video</button></div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <BulkImportButton
+            label="videos"
+            headers={['id', 'title', 'tag', 'thumb', 'youtube', 'video_url', 'duration', 'products']}
+            sample={{
+              id: '', title: "The Bag You'll Carry Forever", tag: 'Fashion', thumb: 'https://example.com/thumb.jpg',
+              youtube: 'dQw4w9WgXcQ', video_url: '', duration: '4:32', products: 'quilted-leather-crossbody|eau-de-parfum',
+            }}
+            existing={videos}
+            parseRow={(raw) => ({
+              title: raw.title, tag: raw.tag, thumb: raw.thumb, youtube: raw.youtube, video_url: raw.video_url,
+              duration: raw.duration, products: splitList(raw.products),
+            })}
+            matchExisting={(raw, data, existing) => (raw.id ? existing.find((v) => String(v.id) === String(raw.id).trim()) : null)}
+            getId={(v) => v.id}
+            summarize={(data, match) => `${data.title || '(no title)'}${match ? ' → updates “' + match.title + '”' : ''}`}
+            importUrl="/admin/videos/bulk-import"
+            onDone={(result) => { onToast(bulkResultMessage(result)); router.reload({ only: ['videos'] }); }}
+          />
+          <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> Add video</button>
+        </div></div>
       <div className="adm-panel">
         <table className="adm-table">
           <thead><tr><th></th><th>Title</th><th>Tag</th><th>Duration</th><th>Products</th><th>Video</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead>
@@ -1183,7 +1451,28 @@ function JournalView({ articles, products, onToast }) {
   return (
     <>
       <div className="adm-head"><div><h1>Limitra Journal</h1><p>{articles.length} articles published.</p></div>
-        <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> New article</button></div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <BulkImportButton
+            label="articles"
+            headers={['slug', 'title', 'tag', 'category', 'excerpt', 'img', 'date', 'author', 'read_time', 'featured']}
+            sample={{
+              slug: 'the-bag-youll-carry-forever', title: "The Bag You'll Carry Forever", tag: 'Fashion', category: 'Women',
+              excerpt: 'Short summary shown on homepage and guide cards.', img: 'https://example.com/hero.jpg',
+              date: 'July 3, 2026', author: 'Limitra Editors', read_time: '5 min', featured: 'FALSE',
+            }}
+            existing={articles}
+            parseRow={(raw) => ({
+              slug: raw.slug, title: raw.title, tag: raw.tag, category: raw.category, excerpt: raw.excerpt,
+              img: raw.img, date: raw.date, author: raw.author, readTime: raw.read_time, featured: toBool(raw.featured),
+            })}
+            matchExisting={(raw, data, existing) => (data.slug ? existing.find((a) => a.slug === admSlug(data.slug)) : null)}
+            getId={(a) => a.id}
+            summarize={(data, match) => `${data.title || '(no title)'}${match ? ' → updates “' + match.title + '”' : ''}`}
+            importUrl="/admin/articles/bulk-import"
+            onDone={(result) => { onToast(bulkResultMessage(result) + (result.created ? ' New articles get a single lead paragraph from the excerpt — add the full body afterward.' : '')); router.reload({ only: ['articles'] }); }}
+          />
+          <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> New article</button>
+        </div></div>
       <div className="adm-panel">
         <table className="adm-table">
           <thead><tr><th></th><th>Article</th><th>Tag</th><th>Date</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead>
@@ -1321,7 +1610,28 @@ function OccasionsAdminView({ occasions, onToast }) {
   return (
     <>
       <div className="adm-head"><div><h1>Special Occasions</h1><p>Manage curated occasion collections on the homepage.</p></div>
-        <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> New occasion</button></div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <BulkImportButton
+            label="occasions"
+            headers={['key', 'title', 'eyebrow', 'tagline', 'badge', 'img', 'link', 'featured', 'is_hero']}
+            sample={{
+              key: 'valentines-day-edit', title: "Valentine's Day Edit", eyebrow: 'Limited · 2026',
+              tagline: 'Short description shown on the card.', badge: "💝 Valentine's",
+              img: 'https://example.com/occasion.jpg', link: '/collection/valentines', featured: 'FALSE', is_hero: 'FALSE',
+            }}
+            existing={occasions}
+            parseRow={(raw) => ({
+              key: raw.key, title: raw.title, eyebrow: raw.eyebrow, tagline: raw.tagline, badge: raw.badge,
+              img: raw.img, link: raw.link, featured: toBool(raw.featured), is_hero: toBool(raw.is_hero),
+            })}
+            matchExisting={(raw, data, existing) => (data.key ? existing.find((o) => o.key === admSlug(data.key)) : null)}
+            getId={(o) => o.id}
+            summarize={(data, match) => `${data.title || '(no title)'}${match ? ' → updates “' + match.title + '”' : ''}`}
+            importUrl="/admin/occasions/bulk-import"
+            onDone={(result) => { onToast(bulkResultMessage(result)); router.reload({ only: ['occasions'] }); }}
+          />
+          <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> New occasion</button>
+        </div></div>
       <div className="adm-panel">
         {occasions.length === 0 ? (
           <div className="adm-empty"><I.sparkle width="40" height="40" /><p style={{ margin: 0 }}>No occasions yet.</p></div>
@@ -1700,7 +2010,7 @@ export default function AdminIndex() {
 
         <main className="adm-main">
           {view === 'dashboard' && <Dashboard products={products} settings={settings} onAdd={() => setEditor({})} onGo={setView} />}
-          {view === 'products' && <ProductsView products={products} categories={categories} onAdd={() => setEditor({})} onEdit={(p) => setEditor(p)} onDelete={deleteProduct} />}
+          {view === 'products' && <ProductsView products={products} categories={categories} onAdd={() => setEditor({})} onEdit={(p) => setEditor(p)} onDelete={deleteProduct} onToast={admToast} />}
           {view === 'categories' && <CategoriesView categories={categories} onToast={admToast} />}
           {view === 'looks' && <LooksView looks={looks} products={products} onToast={admToast} />}
           {view === 'videos' && <VideosAdminView videos={videos} products={products} onToast={admToast} />}
