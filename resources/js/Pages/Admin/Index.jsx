@@ -23,80 +23,27 @@ function admSlug(s) {
   return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
+// Tracks how many concurrent uploads are in flight so a parent editor can
+// disable its Save button until every image has finished processing.
+function useUploadBusy() {
+  const [count, setCount] = useState(0);
+  const bump = (delta) => setCount((n) => Math.max(0, n + delta));
+  return [count > 0, bump];
+}
+
 // ── Shared image inputs ───────────────────────────────────────────────────────
 
-function ImageInput({ value, onChange }) {
-  const fileRef = useRef(null);
+function ImgInput({ value, onChange, label, onBusyChange }) {
+  const ref = useRef(null);
   const [busy, setBusy] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const pick = async (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
-    setBusy(true); setUploadError(null);
+    setBusy(true); setUploadError(null); onBusyChange?.(true);
     try { onChange(await uploadImageFile(f)); } catch (err) { setUploadError('Upload failed — try again'); }
-    setBusy(false);
+    setBusy(false); onBusyChange?.(false);
     e.target.value = '';
-  };
-  return (
-    <div className="adm-img">
-      <div className="adm-img-prev">
-        {value ? <img src={value} alt="preview" /> : <I.image />}
-      </div>
-      <div className="adm-img-controls">
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pick} />
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => fileRef.current.click()}>
-            <I.upload /> {busy ? 'Processing…' : 'Upload image'}
-          </button>
-          {value && <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => onChange('')}>Remove</button>}
-        </div>
-        {uploadError && <span style={{ color: 'var(--error, #c00)', fontSize: 12 }}>{uploadError}</span>}
-        <input
-          className="adm-input"
-          placeholder="…or paste an image URL"
-          value={value && value.startsWith('data:') ? '' : (value || '')}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      </div>
-    </div>
-  );
-}
-
-function GalleryInput({ items, onChange }) {
-  const fileRef = useRef(null);
-  const addFiles = async (e) => {
-    const files = [...(e.target.files || [])];
-    const urls = [];
-    for (const f of files) { try { urls.push(await uploadImageFile(f)); } catch (err) {} }
-    onChange([...items, ...urls]);
-    e.target.value = '';
-  };
-  return (
-    <div className="adm-gallery-grid">
-      {items.map((g, i) => (
-        <div className="adm-gthumb" key={i}>
-          <img src={g} alt="" />
-          <button type="button" className="x" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label="Remove">
-            <I.close width="13" height="13" />
-          </button>
-        </div>
-      ))}
-      <button type="button" className="adm-gadd" onClick={() => fileRef.current.click()}>
-        <I.plus /> Add
-        <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={addFiles} />
-      </button>
-    </div>
-  );
-}
-
-function ImgInput({ value, onChange, label }) {
-  const ref = useRef(null);
-  const [busy, setBusy] = useState(false);
-  const pick = async (e) => {
-    const f = e.target.files && e.target.files[0]; if (!f) return;
-    setBusy(true);
-    try { onChange(await uploadImageFile(f)); } catch (err) {}
-    setBusy(false); e.target.value = '';
   };
   return (
     <div className="adm-field">
@@ -108,11 +55,12 @@ function ImgInput({ value, onChange, label }) {
         <div className="adm-img-controls">
           <input ref={ref} type="file" accept="image/*" style={{ display: 'none' }} onChange={pick} />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => ref.current.click()}>
-              <I.upload /> {busy ? '…' : 'Upload'}
+            <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => ref.current.click()} disabled={busy}>
+              <I.upload /> {busy ? 'Processing…' : 'Upload'}
             </button>
             {value && <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => onChange('')}>Remove</button>}
           </div>
+          {uploadError && <span style={{ color: 'var(--error, #c00)', fontSize: 12 }}>{uploadError}</span>}
           <input
             className="adm-input"
             placeholder="…or paste URL"
@@ -122,6 +70,43 @@ function ImgInput({ value, onChange, label }) {
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function GalleryInput({ items, onChange, onBusyChange }) {
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const addFiles = async (e) => {
+    const files = [...(e.target.files || [])];
+    if (!files.length) return;
+    setBusy(true); setUploadError(null); onBusyChange?.(true);
+    const urls = [];
+    for (const f of files) {
+      try { urls.push(await uploadImageFile(f)); } catch (err) { setUploadError('Upload failed — try again'); }
+    }
+    onChange([...items, ...urls]);
+    setBusy(false); onBusyChange?.(false);
+    e.target.value = '';
+  };
+  return (
+    <div>
+      <div className="adm-gallery-grid">
+        {items.map((g, i) => (
+          <div className="adm-gthumb" key={i}>
+            <img src={g} alt="" />
+            <button type="button" className="x" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label="Remove">
+              <I.close width="13" height="13" />
+            </button>
+          </div>
+        ))}
+        <button type="button" className="adm-gadd" onClick={() => fileRef.current.click()} disabled={busy}>
+          <I.plus /> {busy ? 'Processing…' : 'Add'}
+          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={addFiles} />
+        </button>
+      </div>
+      {uploadError && <span style={{ color: 'var(--error, #c00)', fontSize: 12, display: 'block', marginTop: 6 }}>{uploadError}</span>}
     </div>
   );
 }
@@ -208,6 +193,7 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
     is_new: start.is_new || false,
   });
   const [err, setErr] = useState('');
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
   const isEdit = !!(initial && initial.id);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
@@ -317,11 +303,11 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
       <div className="adm-section-title">Images</div>
       <div className="adm-field">
         <label>Main image</label>
-        <ImageInput value={f.image} onChange={(v) => set('image', v)} />
+        <ImgInput value={f.image} onChange={(v) => set('image', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       </div>
       <div className="adm-field">
         <label>Gallery (detail-page thumbnails)</label>
-        <GalleryInput items={f.gallery} onChange={(v) => set('gallery', v)} />
+        <GalleryInput items={f.gallery} onChange={(v) => set('gallery', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       </div>
 
       <div className="adm-section-title">Descriptions</div>
@@ -354,7 +340,7 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
         {err && <span className="err">{err}</span>}
         <span className="spacer"></span>
         <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={submit}><I.check /> {isEdit ? 'Save changes' : 'Add product'}</button>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={imgBusy}><I.check /> {isEdit ? 'Save changes' : 'Add product'}</button>
       </div>
     </div>
   );
@@ -547,15 +533,16 @@ function CatEditor({ cat, onSave }) {
   const [ban, setBan] = useState(cat.bannerImg || '');
   const [subs, setSubs] = useState(cat.subs || []);
   const [newSub, setNewSub] = useState('');
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
   const addSub = () => { if (newSub.trim()) { setSubs([...subs, newSub.trim()]); setNewSub(''); } };
   const remSub = (i) => setSubs(subs.filter((_, j) => j !== i));
   const moveSub = (i, d) => { const n = [...subs]; [n[i], n[i + d]] = [n[i + d], n[i]]; setSubs(n); };
   return (
     <div style={{ borderTop: '1px solid var(--line)', paddingTop: 16, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <ImgInput label="Homepage tile image" value={img} onChange={setImg} />
-      <ImgInput label="Feature image 1 (mega-menu left)" value={fi1} onChange={setFi1} />
-      <ImgInput label="Feature image 2 (mega-menu right)" value={fi2} onChange={setFi2} />
-      <ImgInput label="Category hero / banner (wide)" value={ban} onChange={setBan} />
+      <ImgInput label="Homepage tile image" value={img} onChange={setImg} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+      <ImgInput label="Feature image 1 (mega-menu left)" value={fi1} onChange={setFi1} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+      <ImgInput label="Feature image 2 (mega-menu right)" value={fi2} onChange={setFi2} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+      <ImgInput label="Category hero / banner (wide)" value={ban} onChange={setBan} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       <div className="adm-field">
         <label>Subcategories</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -573,7 +560,7 @@ function CatEditor({ cat, onSave }) {
           </div>
         </div>
       </div>
-      <button type="button" className="adm-btn adm-btn-primary" onClick={() => onSave({ img, featureImg: fi1, featureImg2: fi2, bannerImg: ban, subs })}>
+      <button type="button" className="adm-btn adm-btn-primary" onClick={() => onSave({ img, featureImg: fi1, featureImg2: fi2, bannerImg: ban, subs })} disabled={imgBusy}>
         <I.check /> Save category
       </button>
     </div>
@@ -742,6 +729,7 @@ function LookEditor({ initial, products, onCancel, onSave, existingIds }) {
   const [palette, setPalette] = useState((initial.palette || ['#1a2744', '#cf8a32', '#f8f6f1', '#c4a882', '#2d5a8a']).join(', '));
   const [gridItems, setGridItems] = useState(initial.grid_items || []);
   const [err, setErr] = useState('');
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
 
   const submit = () => {
     if (!event.trim()) return setErr('Event name is required.');
@@ -765,7 +753,7 @@ function LookEditor({ initial, products, onCancel, onSave, existingIds }) {
         <div className="adm-field"><label>Tags (comma-separated)</label>
           <input className="adm-input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="e.g. Colorful, Playful Luxury" /></div>
       </div>
-      <ImgInput label="Hero model photo (tall, portrait)" value={heroImg} onChange={setHeroImg} />
+      <ImgInput label="Hero model photo (tall, portrait)" value={heroImg} onChange={setHeroImg} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       <div className="adm-field"><label>Style notes</label>
         <textarea className="adm-textarea" value={styleNotes} onChange={(e) => setStyleNotes(e.target.value)} placeholder="Editorial notes shown at the bottom of the look…" /></div>
       <div className="adm-field"><label>Colour palette (hex codes, comma-separated)</label>
@@ -776,7 +764,7 @@ function LookEditor({ initial, products, onCancel, onSave, existingIds }) {
         {err && <span className="err">{err}</span>}
         <span className="spacer"></span>
         <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={submit}><I.check /> {isEdit ? 'Save changes' : 'Publish look'}</button>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={imgBusy}><I.check /> {isEdit ? 'Save changes' : 'Publish look'}</button>
       </div>
     </div>
   );
@@ -962,6 +950,7 @@ function VideoEditor({ initial, products, onCancel, onSave }) {
   const [videoUrl, setVideoUrl] = useState(initial.video_url || '');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
   const fileRef = useRef(null);
 
   const handleYtChange = (val) => {
@@ -1125,7 +1114,7 @@ function VideoEditor({ initial, products, onCancel, onSave }) {
         </>
       )}
 
-      <ImgInput label="Thumbnail (auto-captured from uploaded video — or paste a URL)" value={thumb} onChange={setThumb} />
+      <ImgInput label="Thumbnail (auto-captured from uploaded video — or paste a URL)" value={thumb} onChange={setThumb} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
 
       <div className="adm-section-title">
         Attached products <span style={{ fontWeight: 400, fontSize: 12, textTransform: 'none', letterSpacing: 0, color: 'var(--muted)' }}>— shown beside the video ({selectedIds.length} selected)</span>
@@ -1135,7 +1124,7 @@ function VideoEditor({ initial, products, onCancel, onSave }) {
         {err && <span className="err">{err}</span>}
         <span className="spacer"></span>
         <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={submit}><I.check /> Save video</button>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={imgBusy || uploading}><I.check /> Save video</button>
       </div>
     </div>
   );
@@ -1219,6 +1208,7 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
   const [readTime, setReadTime] = useState(initial.read_time || '5 min');
   const [body, setBody] = useState(initial.body || [{ type: 'lead', text: '' }]);
   const [err, setErr] = useState('');
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
 
   const BTYPES = ['lead', 'text', 'heading', 'pullquote', 'products'];
   const setBlock = (i, patch) => { const n = [...body]; n[i] = { ...n[i], ...patch }; setBody(n); };
@@ -1242,7 +1232,7 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
           <select className="adm-input" value={category} onChange={(e) => setCategory(e.target.value)}>{ART_CATS.map((c) => <option key={c}>{c}</option>)}</select></div>
       </div>
       <div className="adm-field"><label>Excerpt</label><textarea className="adm-textarea" style={{ minHeight: 60 }} value={excerpt} onChange={(e) => setExcerpt(e.target.value)} placeholder="Short summary shown on homepage and guide cards." /></div>
-      <ImgInput label="Hero image (wide landscape)" value={img} onChange={setImg} />
+      <ImgInput label="Hero image (wide landscape)" value={img} onChange={setImg} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       <div className="adm-grid3">
         <div className="adm-field"><label>Date</label><input className="adm-input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <div className="adm-field"><label>Author</label><input className="adm-input" value={author} onChange={(e) => setAuthor(e.target.value)} /></div>
@@ -1273,7 +1263,7 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
       </div>
       <div className="adm-form-foot">{err && <span className="err">{err}</span>}<span className="spacer"></span>
         <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={submit}><I.check /> {isEdit ? 'Save article' : 'Publish article'}</button></div>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={imgBusy}><I.check /> {isEdit ? 'Save article' : 'Publish article'}</button></div>
     </div>
   );
 }
@@ -1357,6 +1347,7 @@ function OccEditor({ initial, onCancel, onSave, existing }) {
   const [featured, setFeatured] = useState(initial.featured || false);
   const [isHero, setIsHero] = useState(initial.is_hero || false);
   const [err, setErr] = useState('');
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
   const submit = () => {
     if (!title.trim()) return setErr('Title required.');
     const key = initial.key || admSlug(title);
@@ -1374,7 +1365,7 @@ function OccEditor({ initial, onCancel, onSave, existing }) {
         <div className="adm-field"><label>Badge</label><input className="adm-input" value={badge} onChange={(e) => setBadge(e.target.value)} placeholder="e.g. 💝 Valentine's" /></div>
         <div className="adm-field"><label>Collection link</label><input className="adm-input" value={link} onChange={(e) => setLink(e.target.value)} /></div>
       </div>
-      <ImgInput label="Occasion image" value={img} onChange={setImg} />
+      <ImgInput label="Occasion image" value={img} onChange={setImg} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 14, color: 'var(--ink)', cursor: 'pointer' }}>
           <input type="checkbox" checked={isHero} onChange={(e) => setIsHero(e.target.checked)} />
@@ -1387,16 +1378,18 @@ function OccEditor({ initial, onCancel, onSave, existing }) {
       </div>
       <div className="adm-form-foot">{err && <span className="err">{err}</span>}<span className="spacer"></span>
         <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={submit}><I.check /> {isEdit ? 'Save' : 'Publish'} occasion</button></div>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={imgBusy}><I.check /> {isEdit ? 'Save' : 'Publish'} occasion</button></div>
     </div>
   );
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
-function HeroSlidesEditor({ value, onChange }) {
+function HeroSlidesEditor({ value, onChange, onBusyChange }) {
   const parse = (v) => { try { return JSON.parse(v || '[]'); } catch (e) { return []; } };
   const [slides, setSlides] = useState(() => parse(value));
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
+  useEffect(() => { onBusyChange?.(imgBusy); }, [imgBusy]);
   const commit = (next) => { setSlides(next); onChange(JSON.stringify(next)); };
   const setField = (i, k, v) => commit(slides.map((s, idx) => idx === i ? { ...s, [k]: v } : s));
   const add = () => commit([...slides, { image: '', alt: '', eyebrow: '', title: '', subtitle: '', cta_text: '', cta_url: '', cta2_text: '', cta2_url: '' }]);
@@ -1424,7 +1417,7 @@ function HeroSlidesEditor({ value, onChange }) {
             </div>
           </div>
           <div style={{ padding: 16 }}>
-            <ImgInput label="Slide image" value={slide.image} onChange={(v) => setField(i, 'image', v)} />
+            <ImgInput label="Slide image" value={slide.image} onChange={(v) => setField(i, 'image', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div className="adm-grid2">
                 <div className="adm-field">
@@ -1475,6 +1468,9 @@ function HeroSlidesEditor({ value, onChange }) {
 
 function SettingsView({ settings, onToast }) {
   const [form, setForm] = useState({ ...settings });
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
+  const [slidesBusy, setSlidesBusy] = useState(false);
+  const anyBusy = imgBusy || slidesBusy;
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const save = () => {
     router.put('/admin/settings', form, {
@@ -1538,7 +1534,7 @@ function SettingsView({ settings, onToast }) {
         <h2>Hero carousel slides</h2>
         <p className="sub">Add, remove, and reorder the slides shown in the homepage hero banner. Each slide needs an image and optional alt text.</p>
         <div className="adm-form">
-          <HeroSlidesEditor value={form.hero_slides || '[]'} onChange={(v) => set('hero_slides', v)} />
+          <HeroSlidesEditor value={form.hero_slides || '[]'} onChange={(v) => set('hero_slides', v)} onBusyChange={setSlidesBusy} />
         </div>
       </div>
       <div className="adm-panel">
@@ -1565,7 +1561,7 @@ function SettingsView({ settings, onToast }) {
         <h2>Newsletter popup</h2>
         <p className="sub">Controls the signup modal that appears after a visitor has been on the site for a while.</p>
         <div className="adm-form">
-          <ImgInput label="Modal image" value={form.newsletter_modal_image || ''} onChange={(v) => set('newsletter_modal_image', v)} />
+          <ImgInput label="Modal image" value={form.newsletter_modal_image || ''} onChange={(v) => set('newsletter_modal_image', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
           <div className="adm-grid2">
             <div className="adm-field">
               <label>Delay before popup (ms)</label>
@@ -1581,7 +1577,7 @@ function SettingsView({ settings, onToast }) {
         </div>
       </div>
       <div style={{ padding: '16px 0' }}>
-        <button className="adm-btn adm-btn-primary" onClick={save}><I.check /> Save all settings</button>
+        <button className="adm-btn adm-btn-primary" onClick={save} disabled={anyBusy}><I.check /> Save all settings</button>
       </div>
     </>
   );
