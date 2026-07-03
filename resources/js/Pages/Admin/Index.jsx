@@ -6,6 +6,8 @@ import { TAG_OPTS, ART_TAGS, ART_CATS, BADGES } from '../../constants';
 
 // ── Image helpers ────────────────────────────────────────────────────────────
 
+class SessionExpiredError extends Error {}
+
 async function uploadImageFile(file) {
   const data = new FormData();
   data.append('image', file);
@@ -15,8 +17,29 @@ async function uploadImageFile(file) {
     headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
     body: data,
   });
+  if (res.status === 419) throw new SessionExpiredError('Session expired');
   if (!res.ok) throw new Error('Upload failed');
   return (await res.json()).url;
+}
+
+function uploadErrorMessage(err) {
+  return err instanceof SessionExpiredError
+    ? 'Your session has expired — please reload the page and try again.'
+    : 'Upload failed — try again.';
+}
+
+function UploadErrorNote({ error }) {
+  if (!error) return null;
+  return (
+    <span style={{ color: 'var(--error, #c00)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+      {uploadErrorMessage(error)}
+      {error instanceof SessionExpiredError && (
+        <button type="button" onClick={() => window.location.reload()} style={{ color: 'var(--error, #c00)', textDecoration: 'underline', background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer' }}>
+          Reload now
+        </button>
+      )}
+    </span>
+  );
 }
 
 function admSlug(s) {
@@ -41,7 +64,7 @@ function ImgInput({ value, onChange, label, onBusyChange }) {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
     setBusy(true); setUploadError(null); onBusyChange?.(true);
-    try { onChange(await uploadImageFile(f)); } catch (err) { setUploadError('Upload failed — try again'); }
+    try { onChange(await uploadImageFile(f)); } catch (err) { setUploadError(err); }
     setBusy(false); onBusyChange?.(false);
     e.target.value = '';
   };
@@ -60,7 +83,7 @@ function ImgInput({ value, onChange, label, onBusyChange }) {
             </button>
             {value && <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => onChange('')}>Remove</button>}
           </div>
-          {uploadError && <span style={{ color: 'var(--error, #c00)', fontSize: 12 }}>{uploadError}</span>}
+          <UploadErrorNote error={uploadError} />
           <input
             className="adm-input"
             placeholder="…or paste URL"
@@ -84,7 +107,7 @@ function GalleryInput({ items, onChange, onBusyChange }) {
     setBusy(true); setUploadError(null); onBusyChange?.(true);
     const urls = [];
     for (const f of files) {
-      try { urls.push(await uploadImageFile(f)); } catch (err) { setUploadError('Upload failed — try again'); }
+      try { urls.push(await uploadImageFile(f)); } catch (err) { setUploadError(err); if (err instanceof SessionExpiredError) break; }
     }
     onChange([...items, ...urls]);
     setBusy(false); onBusyChange?.(false);
@@ -106,7 +129,7 @@ function GalleryInput({ items, onChange, onBusyChange }) {
           <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={addFiles} />
         </button>
       </div>
-      {uploadError && <span style={{ color: 'var(--error, #c00)', fontSize: 12, display: 'block', marginTop: 6 }}>{uploadError}</span>}
+      <div style={{ marginTop: 6 }}><UploadErrorNote error={uploadError} /></div>
     </div>
   );
 }
