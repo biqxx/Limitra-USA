@@ -3,7 +3,7 @@ import { usePage, Link } from '@inertiajs/react';
 import Layout from '../Components/Layout';
 import Seo from '../Components/Seo';
 import I from '../Components/Icons';
-import { ProductRow, QuickView, SavedDrawer, ShareRow } from '../Components/ProductCard';
+import { ProductRow, QuickView, SavedDrawer, ShareRow, shopCta } from '../Components/ProductCard';
 
 function StyleTheLookPreview({ product, looks, productsMap }) {
   if (!looks?.length) return null;
@@ -139,7 +139,7 @@ export default function Product() {
 
             <div className="pd-actions">
               <a className="btn btn-primary pd-deal" href={product.affiliate_url || "#"} target="_blank" rel="noopener noreferrer sponsored">
-                Shop Now <I.external />
+                {shopCta(product.retailer)} <I.external />
               </a>
               <div className="row2">
                 <button className={"btn btn-outline"} onClick={() => toggle(product.id)}>

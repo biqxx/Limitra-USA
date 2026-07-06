@@ -8,6 +8,13 @@ import { TAG_OPTS, ART_TAGS, ART_CATS, BADGES } from '../../constants';
 
 class SessionExpiredError extends Error {}
 
+// A 419 on any admin request means the session/CSRF token is no longer valid —
+// log the admin out by sending them to the login screen. (Router-driven Inertia
+// requests are handled globally in app.jsx; this covers raw fetch/XHR calls.)
+function handleSessionExpired() {
+  window.location.href = '/admin/login';
+}
+
 async function uploadImageFile(file) {
   const data = new FormData();
   data.append('image', file);
@@ -17,7 +24,7 @@ async function uploadImageFile(file) {
     headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
     body: data,
   });
-  if (res.status === 419) throw new SessionExpiredError('Session expired');
+  if (res.status === 419) { handleSessionExpired(); throw new SessionExpiredError('Session expired'); }
   if (!res.ok) throw new Error('Upload failed');
   return (await res.json()).url;
 }
@@ -195,7 +202,7 @@ async function postJSON(url, body) {
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (res.status === 419) throw new SessionExpiredError('Session expired');
+  if (res.status === 419) { handleSessionExpired(); throw new SessionExpiredError('Session expired'); }
   if (!res.ok) throw new Error('Import failed');
   return res.json();
 }
@@ -1303,6 +1310,8 @@ function VideoEditor({ initial, products, onCancel, onSave }) {
           setVideoUrl(data.url);
           captureThumb(data.url);
         } catch (_) { setErr('Upload response invalid.'); }
+      } else if (xhr.status === 419) {
+        handleSessionExpired();
       } else {
         setErr('Upload failed. Max size is 500 MB.');
       }
