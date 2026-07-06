@@ -57,13 +57,6 @@ class MigrateProductUuids extends Command
                         ->where('product_id', $oldId)
                         ->update(['product_id' => $info['new']]);
 
-                    // product_reviews may or may not exist in this install; only touch it if present.
-                    if (Schema::hasTable('product_reviews')) {
-                        DB::table('product_reviews')
-                            ->where('product_id', $oldId)
-                            ->update(['product_id' => $info['new']]);
-                    }
-
                     DB::table('products')
                         ->where('id', $oldId)
                         ->update(['id' => $info['new'], 'slug' => $info['slug']]);
