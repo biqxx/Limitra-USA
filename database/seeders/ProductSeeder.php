@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductDetail;
 use App\Models\Subcategory;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 class ProductSeeder extends Seeder
 {
@@ -85,7 +86,8 @@ class ProductSeeder extends Seeder
             $catId = $this->getCategoryId($p['category']);
             $subId = $catId ? $this->getSubcategoryId($catId, $p['subcategory']) : null;
             Product::create([
-                'id' => $p['id'],
+                'id' => (string) Str::uuid(),
+                'slug' => $p['id'],
                 'name' => $p['name'],
                 'brand' => $p['brand'],
                 'price' => $p['price'],
@@ -192,7 +194,8 @@ class ProductSeeder extends Seeder
                     $price = $prices[$ci % count($prices)];
 
                     Product::create([
-                        'id' => $id,
+                        'id' => (string) Str::uuid(),
+                        'slug' => $id,
                         'name' => $name,
                         'brand' => $brand,
                         'price' => $price,
@@ -201,7 +204,7 @@ class ProductSeeder extends Seeder
                         'retailer' => $retailer,
                         'affiliate_url' => null,
                         'image' => null,
-                        'slot' => $id,
+                        'slot' => null,
                         'description' => "{$name} from {$brand} — a Limitra-curated " . strtolower($sub) . " piece, chosen for its quality, finish and lasting appeal.",
                         'editor_note' => null,
                         'is_featured' => false,
@@ -236,8 +239,8 @@ class ProductSeeder extends Seeder
             'eau-de-parfum' => ['price' => '$160', 'rating' => 4.9, 'badge' => "Editor's Pick", 'retailer' => 'Sephora', 'image' => 'https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=700&q=72', 'description' => 'A warm amber-and-neroli eau de parfum with a lingering vanilla base — a signature scent that feels like summer light bottled.', 'features' => ['Notes: neroli, amber, vanilla', 'Long-wear concentration (18%)', '50ml refillable flacon']],
         ];
 
-        foreach ($curated as $productId => $overrides) {
-            $product = Product::find($productId);
+        foreach ($curated as $productSlug => $overrides) {
+            $product = Product::where('slug', $productSlug)->first();
             if ($product) {
                 $product->update($overrides);
             }
@@ -260,12 +263,12 @@ class ProductSeeder extends Seeder
             'eau-de-parfum' => [],
         ];
 
-        foreach ($details as $productId => $detail) {
-            $product = Product::find($productId);
+        foreach ($details as $productSlug => $detail) {
+            $product = Product::where('slug', $productSlug)->first();
             if (!$product) continue;
 
             ProductDetail::create([
-                'product_id' => $productId,
+                'product_id' => $product->id,
                 'about' => $detail['about'] ?? null,
                 'highlights' => $detail['highlights'] ?? null,
                 'specs' => $detail['specs'] ?? null,

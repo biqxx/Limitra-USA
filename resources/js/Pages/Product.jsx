@@ -8,7 +8,10 @@ import { ProductRow, QuickView, SavedDrawer, ShareRow } from '../Components/Prod
 function StyleTheLookPreview({ product, looks, productsMap }) {
   if (!looks?.length) return null;
 
-  const containing = looks.filter((l) => (l.product_ids || l.products || []).includes(product.id));
+  const containing = looks.filter((l) => {
+    const refs = l.product_ids || l.products || [];
+    return refs.includes(product.id) || refs.includes(product.slug);
+  });
   const fallback = looks.filter((l) => !containing.includes(l));
   const shown = [...containing, ...fallback].slice(0, 2);
   if (!shown.length) return null;
@@ -90,7 +93,7 @@ export default function Product() {
   const highlights = detail?.highlights || product?.features || [];
   const specs = detail?.specs || [];
   const copyLink = async () => {
-    const url = `${window.location.origin}/product/${product.id}`;
+    const url = `${window.location.origin}/product/${product.slug || product.id}`;
     try { await navigator.clipboard.writeText(url); } catch (e) {}
     setCopied(true); setTimeout(() => setCopied(false), 1600);
   };

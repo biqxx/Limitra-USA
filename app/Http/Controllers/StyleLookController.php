@@ -21,8 +21,9 @@ class StyleLookController extends Controller
     {
         $look = Look::where('slug', $slug)->firstOrFail();
 
+        $lookRefs = $look->products ?? [];
         $products = Product::with(['category', 'subcategory'])
-            ->whereIn('id', $look->products ?? [])
+            ->where(fn ($q) => $q->whereIn('id', $lookRefs)->orWhereIn('slug', $lookRefs))
             ->get()
             ->map(fn ($p) => $p->toFrontend())
             ->values();

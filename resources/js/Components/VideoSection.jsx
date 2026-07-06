@@ -99,7 +99,7 @@ function ProductItem({ product }) {
   const [hov, setHov] = useState(false);
   return (
     <Link
-      href={`/product/${product.id}`}
+      href={`/product/${product.slug || product.id}`}
       target="_blank"
       rel="noopener noreferrer"
       onMouseEnter={() => setHov(true)}
@@ -127,7 +127,7 @@ function ProductItem({ product }) {
 function ProductMobileItem({ product }) {
   return (
     <Link
-      href={`/product/${product.id}`}
+      href={`/product/${product.slug || product.id}`}
       target="_blank"
       rel="noopener noreferrer"
       style={{ flexShrink: 0, textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 7, width: 90 }}

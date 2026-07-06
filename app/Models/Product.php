@@ -10,7 +10,7 @@ class Product extends Model
     public $incrementing = false;
     protected $keyType = 'string';
 
-    protected $fillable = ['id','name','brand','price','category_id','subcategory_id','retailer','affiliate_url','image','slot','description','editor_note','is_featured','is_resort','is_new','badge','rating','days_ago','tags','related_products','features'];
+    protected $fillable = ['id','slug','name','brand','price','category_id','subcategory_id','retailer','affiliate_url','image','slot','description','editor_note','is_featured','is_resort','is_new','badge','rating','days_ago','tags','related_products','features'];
 
     protected $casts = [
         'tags' => 'array',
@@ -40,6 +40,7 @@ class Product extends Model
     {
         return [
             'id' => $this->id,
+            'slug' => $this->slug,
             'name' => $this->name,
             'brand' => $this->brand,
             'price' => $this->price,

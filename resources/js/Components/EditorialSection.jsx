@@ -74,7 +74,7 @@ export function EditorialSection({ articles }) {
 export function ArtProduct({ p }) {
   if (!p) return null;
   return (
-    <Link className="art-prod" href={`/product/${p.id}`}>
+    <Link className="art-prod" href={`/product/${p.slug || p.id}`}>
       <div className="ap-img">
         {p.image && <img src={p.image} alt={p.name} loading="lazy" />}
       </div>

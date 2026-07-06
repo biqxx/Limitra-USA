@@ -10,7 +10,7 @@ function safeContent(text) {
 
 function ChatProdCard({ p }) {
   return (
-    <a href={`/product/${p.id}`} className="chat-prod-card" target="_blank" rel="noopener">
+    <a href={`/product/${p.slug || p.id}`} className="chat-prod-card" target="_blank" rel="noopener">
       <div className="cpc-img">
         {p.image && <img src={p.image} alt={p.name} />}
       </div>

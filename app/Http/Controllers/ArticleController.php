@@ -20,7 +20,7 @@ class ArticleController extends Controller
             ->toArray();
 
         $products = Product::with(['category', 'subcategory'])
-            ->whereIn('id', $productIds)
+            ->where(fn ($q) => $q->whereIn('id', $productIds)->orWhereIn('slug', $productIds))
             ->get()
             ->map(fn ($p) => $p->toFrontend())
             ->values();

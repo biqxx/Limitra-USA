@@ -42,7 +42,7 @@ export function ProductCard({ p, saved, onToggle, onQuick, dealCta, lead }) {
         </div>
       </div>
       <div className="prod-actions">
-        <Link className="deal-btn" href={`/product/${p.id}`}>{dealCta || "Shop Now"}</Link>
+        <Link className="deal-btn" href={`/product/${p.slug || p.id}`}>{dealCta || "Shop Now"}</Link>
         <Bookmark saved={saved} onClick={() => onToggle(p.id)} />
       </div>
     </article>
@@ -91,7 +91,7 @@ export function CategoryGrid({ categories }) {
 
 export function ShareRow({ product }) {
   const [toast, setToast] = useState(null);
-  const url = typeof window !== 'undefined' ? `${window.location.origin}/product/${product.id}` : `/product/${product.id}`;
+  const url = typeof window !== 'undefined' ? `${window.location.origin}/product/${product.slug || product.id}` : `/product/${product.slug || product.id}`;
   const text = `${product.name} by ${product.brand} — found on Limitra`;
   const enc = encodeURIComponent;
 
@@ -163,7 +163,7 @@ export function QuickView({ product, saved, onToggle, onClose, dealCta }) {
             <a className="btn btn-primary btn-block" href={product.affiliate_url || "#"} target="_blank" rel="noopener noreferrer sponsored">
               {dealCta || "Shop Now"} at {product.retailer} <I.external />
             </a>
-            <Link className={"btn btn-outline btn-block"} href={`/product/${product.id}`}>
+            <Link className={"btn btn-outline btn-block"} href={`/product/${product.slug || product.id}`}>
               See full details
             </Link>
             <button className={"btn btn-outline btn-block"} onClick={() => onToggle(product.id)}>

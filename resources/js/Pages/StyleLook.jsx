@@ -8,7 +8,7 @@ import { SavedDrawer } from '../Components/ProductCard';
 function StlProd({ p, hero }) {
   if (!p) return <div className={"stl-prod" + (hero ? " hero" : "")}></div>;
   return (
-    <Link className={"stl-prod" + (hero ? " hero" : "")} href={`/product/${p.id}`}>
+    <Link className={"stl-prod" + (hero ? " hero" : "")} href={`/product/${p.slug || p.id}`}>
       <div className="stl-prod-img">
         {p.image && <img src={p.image} alt={p.name} loading="lazy" />}
       </div>
@@ -28,7 +28,7 @@ function ConfigGridMosaic({ items, productsMap }) {
       {items.map((item, i) => {
         const p = item.id ? productsMap[item.id] : null;
         return (
-          <Link key={i} className="stl-prod" href={p ? `/product/${p.id}` : "#"}
+          <Link key={i} className="stl-prod" href={p ? `/product/${p.slug || p.id}` : "#"}
             style={{ gridColumn: `span ${item.col_span || item.colSpan || 1}`, gridRow: `span ${item.row_span || item.rowSpan || 1}` }}>
             <div className="stl-prod-img" style={{ flex: 1 }}>
               {item.image
@@ -143,7 +143,7 @@ export default function StyleLook() {
   const toggle = (id) => setSaved((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const productsMap = {};
-  (products || []).forEach((p) => { productsMap[p.id] = p; });
+  (products || []).forEach((p) => { productsMap[p.id] = p; if (p.slug) productsMap[p.slug] = p; });
 
   if (!look) return null;
 

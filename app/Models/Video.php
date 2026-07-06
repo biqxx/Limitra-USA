@@ -17,7 +17,17 @@ class Video extends Model
         $videos = static::orderBy('sort_order')->get();
 
         $allIds = $videos->flatMap(fn ($v) => $v->products ?? [])->flatten()->filter(fn ($id) => is_scalar($id) && $id !== '')->unique()->values();
-        $products = Product::whereIn('id', $allIds)->get()->keyBy('id');
+
+        // A product reference may be a UUID id or the former id (now the slug), so key by both.
+        $products = [];
+        Product::where(fn ($q) => $q->whereIn('id', $allIds)->orWhereIn('slug', $allIds))
+            ->get()
+            ->each(function ($p) use (&$products) {
+                $products[$p->id] = $p;
+                if ($p->slug) {
+                    $products[$p->slug] = $p;
+                }
+            });
 
         return $videos->map(function ($video) use ($products) {
             $data = $video->toArray();
@@ -26,6 +36,7 @@ class Video extends Model
                 ->filter(fn ($id) => is_scalar($id) && $id !== '')
                 ->map(fn ($id) => isset($products[$id]) ? [
                     'id'    => $products[$id]->id,
+                    'slug'  => $products[$id]->slug,
                     'name'  => $products[$id]->name,
                     'brand' => $products[$id]->brand,
                     'image' => $products[$id]->image,

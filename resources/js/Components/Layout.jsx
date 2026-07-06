@@ -271,7 +271,7 @@ function SearchModal({ open, onClose, catalog, categories }) {
     const onNav = (e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); setHl((h) => Math.min(h + 1, shown.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
-      else if (e.key === "Enter" && shown[hl]) { window.location.href = `/product/${shown[hl].id}`; }
+      else if (e.key === "Enter" && shown[hl]) { window.location.href = `/product/${shown[hl].slug || shown[hl].id}`; }
     };
     document.addEventListener("keydown", onNav);
     return () => document.removeEventListener("keydown", onNav);
@@ -325,7 +325,7 @@ function SearchModal({ open, onClose, catalog, categories }) {
                 <div className="search-group">
                   <h5>Products · {results.length} found</h5>
                   {shown.map((p, i) => (
-                    <Link className={"search-res" + (i === hl ? " hl" : "")} key={p.id} href={`/product/${p.id}`}
+                    <Link className={"search-res" + (i === hl ? " hl" : "")} key={p.id} href={`/product/${p.slug || p.id}`}
                       onMouseEnter={() => setHl(i)}>
                       <span className="thumb">{p.image ? <img className="p-img" src={p.image} alt="" /> : null}</span>
                       <span className="meta">

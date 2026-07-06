@@ -10,10 +10,13 @@ class ProductController extends Controller
 {
     public function show(string $id)
     {
-        $product = Product::with(['category', 'subcategory', 'detail'])->findOrFail($id);
+        $product = Product::with(['category', 'subcategory', 'detail'])
+            ->where(fn ($q) => $q->where('id', $id)->orWhere('slug', $id))
+            ->firstOrFail();
 
+        $relatedRefs = $product->related_products ?? [];
         $relatedProducts = Product::with(['category', 'subcategory'])
-            ->whereIn('id', $product->related_products ?? [])
+            ->where(fn ($q) => $q->whereIn('id', $relatedRefs)->orWhereIn('slug', $relatedRefs))
             ->get()
             ->map(fn ($p) => $p->toFrontend());
 

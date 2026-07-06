@@ -33,6 +33,7 @@ class HandleInertiaRequests extends Middleware
             ]),
             'catalog' => fn () => \App\Models\Product::with(['category', 'subcategory'])->get()->map(fn ($p) => [
                 'id' => $p->id,
+                'slug' => $p->slug,
                 'name' => $p->name,
                 'brand' => $p->brand,
                 'price' => $p->price,
