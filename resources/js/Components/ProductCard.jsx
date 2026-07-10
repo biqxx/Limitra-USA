@@ -2,12 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import I from './Icons';
 
-// Deal CTA label: "Shop At {Retailer}" (first letter capitalized, brand casing
-// otherwise preserved), falling back to "Shop Now" when no retailer is set.
-export function shopCta(retailer) {
-  const r = (retailer || '').trim();
-  if (!r) return 'Shop Now';
-  return `Shop At ${r.charAt(0).toUpperCase()}${r.slice(1)}`;
+// Deal CTA label, shown regardless of retailer.
+export function shopCta() {
+  return 'Buy Now';
 }
 
 export function Rating({ value, small }) {
@@ -50,7 +47,7 @@ export function ProductCard({ p, saved, onToggle, onQuick, dealCta, lead }) {
         </div>
       </div>
       <div className="prod-actions">
-        <Link className="deal-btn" href={`/product/${p.slug || p.id}`}>{dealCta && dealCta !== "Shop Now" ? dealCta : shopCta(p.retailer)}</Link>
+        <Link className="deal-btn" href={`/product/${p.slug || p.id}`}>{dealCta && dealCta !== "Buy Now" ? dealCta : shopCta()}</Link>
         <Bookmark saved={saved} onClick={() => onToggle(p.id)} />
       </div>
     </article>
@@ -169,7 +166,7 @@ export function QuickView({ product, saved, onToggle, onClose, dealCta }) {
           </ul>
           <div className="modal-actions">
             <a className="btn btn-primary btn-block" href={product.affiliate_url || "#"} target="_blank" rel="noopener noreferrer sponsored">
-              {dealCta && dealCta !== "Shop Now" ? `${dealCta} at ${product.retailer}` : shopCta(product.retailer)} <I.external />
+              {dealCta && dealCta !== "Buy Now" ? `${dealCta} at ${product.retailer}` : shopCta()} <I.external />
             </a>
             <Link className={"btn btn-outline btn-block"} href={`/product/${product.slug || product.id}`}>
               See full details

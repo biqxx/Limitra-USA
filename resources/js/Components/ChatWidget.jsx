@@ -17,7 +17,7 @@ function ChatProdCard({ p }) {
       <div className="cpc-body">
         <span className="cpc-cat">{p.subcategory}</span>
         <span className="cpc-name">{p.name}</span>
-        <span className="cpc-cta">Shop Now →</span>
+        <span className="cpc-cta">Buy Now →</span>
       </div>
     </a>
   );

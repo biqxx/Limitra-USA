@@ -6,6 +6,28 @@ function tagColor(tag) {
   return TAG_COLORS[tag] || 'var(--accent)';
 }
 
+// Renders `[label](https://…)` written in admin as a real link; everything else is
+// plain text, so there's no HTML injection risk.
+const LINK_MARKUP = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+
+function renderLinkedText(text) {
+  if (!text) return text;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  let key = 0;
+  LINK_MARKUP.lastIndex = 0;
+  while ((match = LINK_MARKUP.exec(text))) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    parts.push(
+      <a key={key++} className="art-link" href={match[2]} target="_blank" rel="noopener noreferrer">{match[1]}</a>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts;
+}
+
 export function EdCard({ article, large }) {
   const href = `/article/${article.slug}`;
   return (
@@ -82,17 +104,17 @@ export function ArtProduct({ p }) {
         <div className="ap-brand">{p.brand}</div>
         <div className="ap-name">{p.name}</div>
         <div className="ap-price">{p.price}</div>
-        <span className="ap-cta">Shop Now →</span>
+        <span className="ap-cta">Buy Now →</span>
       </div>
     </Link>
   );
 }
 
 export function ArtBlock({ block, products }) {
-  if (block.type === "lead") return <p className="art-lead">{block.text}</p>;
-  if (block.type === "text") return <p className="art-p">{block.text}</p>;
-  if (block.type === "heading") return <h2 className="art-h2">{block.text}</h2>;
-  if (block.type === "pullquote") return <blockquote className="art-pullquote">"{block.text}"</blockquote>;
+  if (block.type === "lead") return <p className="art-lead">{renderLinkedText(block.text)}</p>;
+  if (block.type === "text") return <p className="art-p">{renderLinkedText(block.text)}</p>;
+  if (block.type === "heading") return <h2 className="art-h2">{renderLinkedText(block.text)}</h2>;
+  if (block.type === "pullquote") return <blockquote className="art-pullquote">"{renderLinkedText(block.text)}"</blockquote>;
   if (block.type === "products") {
     const blockProducts = (block.ids || []).map((id) => products[id]).filter(Boolean);
     if (!blockProducts.length) return null;

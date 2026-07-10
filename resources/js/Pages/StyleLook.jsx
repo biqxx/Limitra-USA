@@ -17,7 +17,7 @@ function StlProd({ p, hero }) {
         <span className="stl-prod-name">{p.name}</span>
         <span className="stl-prod-price">{p.price}</span>
       </div>
-      <div className="stl-view-link"><span>Shop Now →</span></div>
+      <div className="stl-view-link"><span>Buy Now →</span></div>
     </Link>
   );
 }
@@ -44,7 +44,7 @@ function ConfigGridMosaic({ items, productsMap }) {
                 <span className="stl-prod-price">{p.price}</span>
               </div>
             )}
-            <div className="stl-view-link"><span>Shop Now →</span></div>
+            <div className="stl-view-link"><span>Buy Now →</span></div>
           </Link>
         );
       })}

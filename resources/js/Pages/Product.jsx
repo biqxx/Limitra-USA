@@ -139,7 +139,7 @@ export default function Product() {
 
             <div className="pd-actions">
               <a className="btn btn-primary pd-deal" href={product.affiliate_url || "#"} target="_blank" rel="noopener noreferrer sponsored">
-                {shopCta(product.retailer)} <I.external />
+                {shopCta()} <I.external />
               </a>
               <div className="row2">
                 <button className={"btn btn-outline"} onClick={() => toggle(product.id)}>
@@ -193,7 +193,7 @@ export default function Product() {
       <StyleTheLookPreview product={product} looks={looks} />
 
       <ProductRow id="related" eyebrow="You may also like" title="More to discover"
-        items={relatedProducts || []} savedSet={saved} onToggle={toggle} onQuick={setQuick} dealCta="Shop Now" />
+        items={relatedProducts || []} savedSet={saved} onToggle={toggle} onQuick={setQuick} dealCta="Buy Now" />
 
       <QuickView product={quick} saved={quick ? saved.has(quick.id) : false}
         onToggle={toggle} onClose={() => setQuick(null)} dealCta="View Deal" />

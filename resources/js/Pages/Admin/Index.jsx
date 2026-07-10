@@ -1521,6 +1521,46 @@ function JournalView({ articles, products, onToast }) {
   );
 }
 
+// Textarea with an "Insert link" helper that wraps the selection (or prompts for
+// link text) into `[label](url)` markup, rendered as a real <a> on the article page.
+function LinkableTextarea({ value, onChange, placeholder, minHeight }) {
+  const ref = useRef(null);
+
+  const insertLink = () => {
+    const el = ref.current;
+    const start = el ? el.selectionStart : value.length;
+    const end = el ? el.selectionEnd : value.length;
+    const selected = value.slice(start, end);
+
+    const url = window.prompt('Link URL (https://…)');
+    if (!url) return;
+    const trimmedUrl = url.trim();
+    if (!/^https?:\/\//i.test(trimmedUrl)) return alert('Please enter a full http:// or https:// URL.');
+
+    const label = selected || window.prompt('Link text to display', '') || trimmedUrl;
+    const markup = `[${label}](${trimmedUrl})`;
+    const next = value.slice(0, start) + markup + value.slice(end);
+    onChange(next);
+
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const pos = start + markup.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <div>
+      <textarea ref={ref} className="adm-textarea" style={{ minHeight }} value={value} placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)} />
+      <button type="button" className="adm-btn adm-btn-ghost sm" style={{ marginTop: 6 }} onClick={insertLink}>
+        <I.link width="12" height="12" /> Insert link
+      </button>
+    </div>
+  );
+}
+
 function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
   const isEdit = !!(initial && initial.id);
   const [title, setTitle] = useState(initial.title || '');
@@ -1566,6 +1606,9 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
         <div className="adm-field"><label>Read time</label><input className="adm-input" value={readTime} onChange={(e) => setReadTime(e.target.value)} placeholder="e.g. 7 min" /></div>
       </div>
       <div className="adm-section-title">Article body</div>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: -4, marginBottom: 8 }}>
+        Add a "products" block and search to attach items — no need to know IDs. Select text in any other block and click "Insert link" to hyperlink it.
+      </p>
       {body.map((block, i) => (
         <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 9, padding: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -1578,10 +1621,15 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
           {block.type === 'products' ? (
             <>
               <input className="adm-input" placeholder="Section label (e.g. Shop the story)" value={block.label || ''} onChange={(e) => setBlock(i, { label: e.target.value })} style={{ marginBottom: 8 }} />
-              <textarea className="adm-textarea" style={{ minHeight: 60, fontFamily: 'monospace', fontSize: 12 }} value={(block.ids || []).join(', ')} placeholder="Product IDs comma-separated (e.g. leather-shoulder-bag, eau-de-parfum)" onChange={(e) => setBlock(i, { ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
+              <VideoProductPicker selectedIds={block.ids || []} onChange={(ids) => setBlock(i, { ids })} products={products || []} />
             </>
           ) : (
-            <textarea className="adm-textarea" style={{ minHeight: block.type === 'lead' ? 80 : 56 }} value={block.text || ''} onChange={(e) => setBlock(i, { text: e.target.value })} placeholder={block.type === 'heading' ? 'Section heading' : block.type === 'pullquote' ? 'Quote text' : 'Write content…'} />
+            <LinkableTextarea
+              value={block.text || ''}
+              onChange={(text) => setBlock(i, { text })}
+              minHeight={block.type === 'lead' ? 80 : 56}
+              placeholder={block.type === 'heading' ? 'Section heading' : block.type === 'pullquote' ? 'Quote text' : 'Write content… select text and click "Insert link" to link it'}
+            />
           )}
         </div>
       ))}

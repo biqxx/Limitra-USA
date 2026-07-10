@@ -167,7 +167,7 @@ export default function Collection() {
           <div style={{ paddingBottom: 40 }}>
             <div className="listing-grid">
               {sorted.map((p) => (
-                <ProductCard key={p.id} p={p} saved={saved.has(p.id)} onToggle={toggle} onQuick={setQuick} dealCta="Shop Now" />
+                <ProductCard key={p.id} p={p} saved={saved.has(p.id)} onToggle={toggle} onQuick={setQuick} dealCta="Buy Now" />
               ))}
             </div>
           </div>
@@ -175,7 +175,7 @@ export default function Collection() {
       </section>
 
       <QuickView product={quick} saved={quick ? saved.has(quick.id) : false}
-        onToggle={toggle} onClose={() => setQuick(null)} dealCta="Shop Now" />
+        onToggle={toggle} onClose={() => setQuick(null)} dealCta="Buy Now" />
       <SavedDrawer open={drawerOpen} products={savedProducts} onClose={() => setDrawerOpen(false)}
         onToggle={toggle} onQuick={(p) => { setDrawerOpen(false); setQuick(p); }} />
     </Layout>

@@ -66,7 +66,7 @@ export default function Home() {
         savedSet={saved}
         onToggle={toggle}
         onQuick={setQuick}
-        dealCta="Shop Now"
+        dealCta="Buy Now"
       />
 
       <EditorialSection articles={articles} />
@@ -82,7 +82,7 @@ export default function Home() {
         savedSet={saved}
         onToggle={toggle}
         onQuick={setQuick}
-        dealCta="Shop Now"
+        dealCta="Buy Now"
       />
 
       <OccasionsSection occasions={occasions} catalogCount={catalogCount} />
@@ -92,7 +92,7 @@ export default function Home() {
         saved={quick ? saved.has(quick.id) : false}
         onToggle={toggle}
         onClose={() => setQuick(null)}
-        dealCta="Shop Now"
+        dealCta="Buy Now"
       />
       <SavedDrawer
         open={drawerOpen}

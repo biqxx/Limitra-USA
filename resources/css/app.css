@@ -1258,6 +1258,7 @@ section { padding-block: clamp(48px, 6vw, 84px); }
   font-family: var(--font-display,"Bodoni Moda"),serif; font-style: italic;
   font-size: clamp(20px, 2.2vw, 26px); color: var(--brand); line-height: 1.4;
 }
+.art-link { color: inherit; font-style: italic; text-decoration: underline; text-underline-offset: 2px; }
 
 /* shop-the-story product strip — breaks out of the content column */
 .art-shop {
@@ -1799,7 +1800,11 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .adm-tag.cat { background: color-mix(in oklab, var(--brand) 10%, var(--surface)); color: var(--brand); }
 .adm-link-ok { color: #1f8a5b; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; }
 .adm-link-no { color: var(--muted); font-size: 12.5px; }
-.adm-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+/* Keep this a normal table cell (no display:flex on the td) so it stretches to
+   the row height like its siblings; lay the icons out inline instead. */
+.adm-row-actions { text-align: right; white-space: nowrap; }
+.adm-row-actions .adm-icon { vertical-align: middle; }
+.adm-row-actions .adm-icon + .adm-icon { margin-left: 6px; }
 .adm-icon { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); display: inline-flex; align-items: center; justify-content: center; color: var(--ink); transition: background .18s, color .18s, border-color .18s; }
 .adm-icon:hover { border-color: var(--brand); color: var(--brand); }
 .adm-icon.danger:hover { border-color: #c0392b; color: #c0392b; }
