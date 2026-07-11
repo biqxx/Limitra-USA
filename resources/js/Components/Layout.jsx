@@ -612,6 +612,14 @@ export function Newsletter() {
 export function Footer() {
   const { props } = usePage();
   const catalog = props.catalog || [];
+  const ls = props.layoutSettings || {};
+  const socials = [
+    { key: 'instagram', label: 'Instagram', href: ls.social_instagram_url, Icon: I.instagram },
+    { key: 'facebook', label: 'Facebook', href: ls.social_facebook_url, Icon: I.facebook },
+    { key: 'pinterest', label: 'Pinterest', href: ls.social_pinterest_url, Icon: I.pinterest },
+    { key: 'x', label: 'X', href: ls.social_x_url, Icon: I.x },
+    { key: 'tiktok', label: 'TikTok', href: ls.social_tiktok_url, Icon: I.tiktok },
+  ].filter((s) => s.href);
 
   const cols = [
     { h: "Discover", links: [
@@ -645,12 +653,13 @@ export function Footer() {
           <div className="foot-col">
             <BrandMark footer />
             <p>Limitra USA is a curated product discovery platform. We help shoppers find better products from trusted retail destinations.</p>
-            <div className="socials">
-              <a href="#" aria-label="Instagram"><I.instagram /></a>
-              <a href="#" aria-label="Facebook"><I.facebook /></a>
-              <a href="#" aria-label="Pinterest"><I.pinterest /></a>
-              <a href="#" aria-label="X"><I.x /></a>
-            </div>
+            {socials.length > 0 && (
+              <div className="socials">
+                {socials.map(({ key, label, href, Icon }) => (
+                  <a key={key} href={href} target="_blank" rel="noopener noreferrer" aria-label={label}><Icon /></a>
+                ))}
+              </div>
+            )}
           </div>
           {cols.map((col) => (
             <div className="foot-col" key={col.h}>

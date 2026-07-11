@@ -16,8 +16,17 @@ class HandleInertiaRequests extends Middleware
 
     public function share(Request $request): array
     {
+        $shared = [...parent::share($request)];
+
+        // The admin panel ships its own admin-shaped products/categories via
+        // AdminController::index() — skip re-querying the storefront-shaped
+        // versions (and storefront-only layout settings) on every admin load.
+        if ($request->is('admin*')) {
+            return $shared;
+        }
+
         return [
-            ...parent::share($request),
+            ...$shared,
             'categories' => fn () => \App\Models\Category::with('subcategories')->orderBy('sort_order')->get()->map(fn ($c) => [
                 'id' => $c->id,
                 'name' => $c->name,
@@ -46,6 +55,11 @@ class HandleInertiaRequests extends Middleware
                 'newsletter_modal_image',
                 'newsletter_popup_delay_ms',
                 'newsletter_popup_cooldown_ms',
+                'social_instagram_url',
+                'social_facebook_url',
+                'social_pinterest_url',
+                'social_x_url',
+                'social_tiktok_url',
             ])->pluck('value', 'key')->toArray(),
         ];
     }

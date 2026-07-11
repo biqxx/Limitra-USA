@@ -1,8 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { usePage, router, useForm } from '@inertiajs/react';
+import { usePage, router, useForm, Deferred } from '@inertiajs/react';
 import I from '../../Components/Icons';
 import Seo from '../../Components/Seo';
 import { TAG_OPTS, ART_TAGS, ART_CATS, BADGES } from '../../constants';
+import {
+  ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  BarChart, Bar, Cell, PieChart, Pie,
+} from 'recharts';
 
 // ── Image helpers ────────────────────────────────────────────────────────────
 
@@ -579,14 +583,33 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-function Dashboard({ products, settings, onAdd, onGo }) {
+// Shown while a tab's data group is still streaming in from the background
+// (see the `Deferred` wrappers around each view below).
+function AdmTabSkeleton() {
+  return (
+    <>
+      <div className="adm-head">
+        <div className="adm-skel" style={{ width: 220, height: 30, marginBottom: 10 }}></div>
+        <div className="adm-skel" style={{ width: 320, height: 15 }}></div>
+      </div>
+      <div className="adm-panel">
+        <div className="adm-skel" style={{ width: 160, height: 20, marginBottom: 14 }}></div>
+        <div className="adm-skel" style={{ width: '100%', height: 46, marginBottom: 8 }}></div>
+        <div className="adm-skel" style={{ width: '100%', height: 46, marginBottom: 8 }}></div>
+        <div className="adm-skel" style={{ width: '100%', height: 46 }}></div>
+      </div>
+    </>
+  );
+}
+
+function Dashboard({ productsCount, featuredCount, resortCount, linkedCount, recentProducts, onAdd, onGo }) {
   const stats = [
-    { ic: 'box', num: products.length, lab: 'Total products' },
-    { ic: 'sparkle', num: products.filter((p) => p.is_featured).length, lab: 'Featured products' },
-    { ic: 'star2', num: products.filter((p) => p.is_resort).length, lab: 'Resort picks' },
-    { ic: 'grid', num: products.filter((p) => p.affiliateUrl).length, lab: 'Products linked' },
+    { ic: 'box', num: productsCount, lab: 'Total products' },
+    { ic: 'sparkle', num: featuredCount, lab: 'Featured products' },
+    { ic: 'star2', num: resortCount, lab: 'Resort picks' },
+    { ic: 'grid', num: linkedCount, lab: 'Products linked' },
   ];
-  const recent = [...products].slice(-5).reverse();
+  const recent = recentProducts || [];
   return (
     <>
       <div className="adm-head">
@@ -632,6 +655,254 @@ function Dashboard({ products, settings, onAdd, onGo }) {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+const fmtUSD = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtNum = (n) => Number(n || 0).toLocaleString('en-US');
+const fmtPct = (n) => `${Number(n || 0).toFixed(1)}%`;
+
+const DONUT_COLORS = ['var(--brand)', 'var(--accent)', '#7ba7c9', '#a8c4a2', '#d69f7e', 'var(--muted)', 'var(--accent-soft)'];
+
+function AnalyticsEmpty({ label }) {
+  return (
+    <div className="adm-empty" style={{ padding: '32px 20px' }}>
+      <I.chart width="34" height="34" />
+      <h3 style={{ fontSize: 16 }}>No conversions yet in this range</h3>
+      <p style={{ marginBottom: 0 }}>{label || 'Try a wider date range once conversions start syncing in.'}</p>
+    </div>
+  );
+}
+
+function AnalyticsView({ analytics }) {
+  const [range, setRange] = useState(analytics.range || 30);
+  const [loading, setLoading] = useState(false);
+
+  const setRangeAndReload = (n) => {
+    if (n === range || loading) return;
+    setRange(n);
+    router.reload({
+      data: { range: n },
+      only: ['analytics'],
+      preserveState: true,
+      preserveScroll: true,
+      onStart: () => setLoading(true),
+      onFinish: () => setLoading(false),
+    });
+  };
+
+  const kpis = analytics.kpis || {};
+  const trend = analytics.salesTrend || { series: [], moving_average: [] };
+  const byCategory = analytics.salesByCategory || { items: [] };
+  const retailers = analytics.retailerRatio || { items: [] };
+  const topProducts = analytics.topProducts || { items: [] };
+  const byDevice = analytics.clicksByDevice || { items: [] };
+  const sourcePages = analytics.topSourcePages || { items: [] };
+
+  const trendData = (trend.series || []).map((d, i) => ({
+    date: d.date.slice(5),
+    sales: d.sales,
+    ma: (trend.moving_average || [])[i],
+  }));
+
+  const topCategoryName = byCategory.top_category;
+  const categoryData = (byCategory.items || []).slice(0, 8);
+  const donutData = (retailers.items || []).map((r, i) => ({ ...r, color: DONUT_COLORS[i % DONUT_COLORS.length] }));
+  const deviceData = byDevice.items || [];
+  const topDeviceName = deviceData[0]?.device;
+  const maxSourceClicks = Math.max(1, ...((sourcePages.items || []).map((p) => p.clicks)));
+
+  const stats = [
+    { ic: 'search', num: fmtNum(kpis.clicks), lab: 'Total clicks' },
+    { ic: 'check', num: fmtNum(kpis.orders), lab: 'Orders' },
+    { ic: 'chart', num: fmtPct(kpis.conversion_rate), lab: 'Conversion rate' },
+    { ic: 'store', num: fmtUSD(kpis.sales_volume), lab: 'Sales volume' },
+    { ic: 'box', num: fmtUSD(kpis.aov), lab: 'Avg. order value' },
+    { ic: 'shield', num: fmtPct(kpis.settled_rate), lab: 'Settled rate' },
+    { ic: 'trendDown', num: fmtPct(kpis.reversal_rate), lab: 'Reversal rate' },
+    { ic: 'sparkle', num: fmtUSD(kpis.commission_earned), lab: 'Commission earned', hero: true },
+    { ic: 'star2', num: fmtUSD(kpis.epc), lab: 'EPC (per click)', hero: true },
+  ];
+
+  return (
+    <>
+      <div className="adm-head">
+        <div>
+          <h1>Analytics</h1>
+          <p>Affiliate performance — clicks, conversions, and commission earned.</p>
+        </div>
+        <div className="adm-range-switch">
+          {[7, 14, 30].map((n) => (
+            <button key={n} className={range === n ? 'active' : ''} disabled={loading} onClick={() => setRangeAndReload(n)}>{n}d</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="adm-stats">
+        {stats.map((s) => {
+          const Icon = I[s.ic];
+          return (
+            <div className={'adm-stat' + (s.hero ? ' adm-stat-hero' : '')} key={s.lab}>
+              <div className="ic"><Icon /></div>
+              <div className="num">{s.num}</div>
+              <div className="lab">{s.lab}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="adm-panel">
+        <div className="adm-chart-head">
+          <h2 style={{ margin: 0 }}>Sales trend</h2>
+          {trend.hasData && (
+            <span className={'adm-badge-delta ' + (trend.change_pct >= 0 ? 'up' : 'down')}>
+              {trend.change_pct >= 0 ? <I.trendUp /> : <I.trendDown />} {Math.abs(trend.change_pct)}% vs prior {range}d
+            </span>
+          )}
+        </div>
+        <p className="sub">Total sales with a 7-day moving average overlay.</p>
+        {!trend.hasData ? <AnalyticsEmpty /> : (
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={trendData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={{ stroke: 'var(--line)' }} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} width={60} tickFormatter={(v) => `$${Math.round(v)}`} />
+              <Tooltip formatter={(v, name) => [fmtUSD(v), name === 'sales' ? 'Sales' : '7-day avg']} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12.5 }} />
+              <Area type="monotone" dataKey="sales" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.16} strokeWidth={2} />
+              <Line type="monotone" dataKey="ma" stroke="var(--brand)" strokeWidth={2} dot={false} strokeDasharray="5 3" />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="adm-grid2">
+        <div className="adm-panel">
+          <h2>Sales by category</h2>
+          <p className="sub">Which categories are driving sales in this window.</p>
+          {!byCategory.hasData ? <AnalyticsEmpty /> : (
+            <>
+              <ResponsiveContainer width="100%" height={Math.max(180, categoryData.length * 34)}>
+                <BarChart data={categoryData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <XAxis type="number" hide />
+                  <YAxis type="category" dataKey="category" width={110} tick={{ fontSize: 12, fill: 'var(--ink)' }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12.5 }} />
+                  <Bar dataKey="sales" radius={[0, 6, 6, 0]}>
+                    {categoryData.map((c, i) => (
+                      <Cell key={i} fill={c.category === topCategoryName ? 'var(--accent)' : 'var(--muted)'} fillOpacity={c.category === topCategoryName ? 1 : 0.35} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              {topCategoryName && (
+                <p className="adm-callout">Most sold category: <strong>{topCategoryName}</strong> — {fmtUSD(categoryData[0]?.sales)}</p>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="adm-panel">
+          <h2>Retailer sales ratio</h2>
+          <p className="sub">Share of sales by retailer in this window.</p>
+          {!retailers.hasData ? <AnalyticsEmpty /> : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+              <ResponsiveContainer width={160} height={160}>
+                <PieChart>
+                  <Pie data={donutData} dataKey="sales" nameKey="retailer" innerRadius={48} outerRadius={76} paddingAngle={1.5} stroke="none">
+                    {donutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v) => fmtUSD(v)} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12.5 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="adm-legend" style={{ flex: 1, minWidth: 160 }}>
+                {donutData.map((d) => (
+                  <div className="row" key={d.retailer}>
+                    <span className="sw" style={{ background: d.color }}></span>
+                    <span className="name">{d.retailer}</span>
+                    <span className="pct">{fmtPct(d.pct)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="adm-grid2">
+        <div className="adm-panel">
+          <h2>Clicks by device</h2>
+          <p className="sub">Which devices visitors are clicking through on.</p>
+          {!byDevice.hasData ? <AnalyticsEmpty /> : (
+            <ResponsiveContainer width="100%" height={Math.max(140, deviceData.length * 46)}>
+              <BarChart data={deviceData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                <XAxis type="number" hide />
+                <YAxis type="category" dataKey="device" width={70} tick={{ fontSize: 12, fill: 'var(--ink)' }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v, _n, entry) => [`${fmtNum(v)} clicks (${fmtPct(entry.payload.pct)})`, entry.payload.device]} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12.5 }} />
+                <Bar dataKey="clicks" radius={[0, 6, 6, 0]}>
+                  {deviceData.map((d, i) => (
+                    <Cell key={i} fill={d.device === topDeviceName ? 'var(--accent)' : 'var(--muted)'} fillOpacity={d.device === topDeviceName ? 1 : 0.35} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="adm-panel">
+          <h2>Top source pages</h2>
+          <p className="sub">Where on the site clicks are coming from.</p>
+          {!sourcePages.hasData ? <AnalyticsEmpty /> : (
+            <div className="adm-legend">
+              {sourcePages.items.map((p) => (
+                <div className="row" key={p.page}>
+                  <span className="name" style={{ flex: '0 0 150px', fontFamily: 'monospace', fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.page}</span>
+                  <span style={{ flex: 1, background: 'var(--bg)', borderRadius: 999, height: 6, overflow: 'hidden', margin: '0 10px' }}>
+                    <span style={{ display: 'block', height: '100%', width: `${(p.clicks / maxSourceClicks) * 100}%`, background: 'var(--accent)', borderRadius: 999 }}></span>
+                  </span>
+                  <span className="pct">{fmtNum(p.clicks)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="adm-panel">
+        <h2>Top 5 most sold products</h2>
+        <p className="sub">Ranked by units sold in this window.</p>
+        {!topProducts.hasData ? <AnalyticsEmpty /> : (
+          <div className="adm-table-scroll">
+            <table className="adm-table">
+              <thead>
+                <tr><th>#</th><th>Product</th><th>Category</th><th>Retailer</th><th>Units</th><th>Sales</th><th>Commission</th></tr>
+              </thead>
+              <tbody>
+                {topProducts.items.map((p, i) => (
+                  <tr key={p.id}>
+                    <td style={{ color: 'var(--muted)', fontWeight: 700 }}>{i + 1}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {p.image ? <img className="adm-thumb" src={p.image} alt="" /> : <span className="adm-thumb ph"><I.image width="16" height="16" /></span>}
+                        <div>
+                          <div className="adm-pbrand">{p.brand}</div>
+                          <div className="adm-pname">{p.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span className="adm-tag cat">{p.category}</span></td>
+                    <td style={{ fontSize: 13, color: 'var(--muted)' }}>{p.retailer}</td>
+                    <td style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtNum(p.units)}</td>
+                    <td style={{ fontFamily: 'var(--font-display,serif)', color: 'var(--brand)' }}>{fmtUSD(p.sales)}</td>
+                    <td style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--accent)', fontWeight: 700 }}>{fmtUSD(p.commission)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>
@@ -1954,6 +2225,21 @@ function SettingsView({ settings, onToast }) {
         </div>
       </div>
       <div className="adm-panel">
+        <h2>Social links</h2>
+        <p className="sub">Shown as icons in the site footer. Leave a field blank to hide that icon.</p>
+        <div className="adm-form">
+          <div className="adm-grid2">
+            <div className="adm-field"><label>Instagram URL</label><input className="adm-input" value={form.social_instagram_url || ''} onChange={(e) => set('social_instagram_url', e.target.value)} placeholder="https://instagram.com/limitrausa" /></div>
+            <div className="adm-field"><label>Facebook URL</label><input className="adm-input" value={form.social_facebook_url || ''} onChange={(e) => set('social_facebook_url', e.target.value)} placeholder="https://facebook.com/limitrausa" /></div>
+          </div>
+          <div className="adm-grid2">
+            <div className="adm-field"><label>Pinterest URL</label><input className="adm-input" value={form.social_pinterest_url || ''} onChange={(e) => set('social_pinterest_url', e.target.value)} placeholder="https://pinterest.com/limitrausa" /></div>
+            <div className="adm-field"><label>X (Twitter) URL</label><input className="adm-input" value={form.social_x_url || ''} onChange={(e) => set('social_x_url', e.target.value)} placeholder="https://x.com/limitrausa" /></div>
+          </div>
+          <div className="adm-field"><label>TikTok URL</label><input className="adm-input" value={form.social_tiktok_url || ''} onChange={(e) => set('social_tiktok_url', e.target.value)} placeholder="https://tiktok.com/@limitrausa" /></div>
+        </div>
+      </div>
+      <div className="adm-panel">
         <h2>Newsletter popup</h2>
         <p className="sub">Controls the signup modal that appears after a visitor has been on the site for a while.</p>
         <div className="adm-form">
@@ -2091,7 +2377,10 @@ function LogoutButton() {
 
 export default function AdminIndex() {
   const { props } = usePage();
-  const { products = [], categories = [], occasions = [], articles = [], looks = [], videos = [], settings = {}, bulkImports = [] } = props;
+  const {
+    products = [], categories = [], occasions = [], articles = [], looks = [], videos = [], settings = {}, bulkImports = [], analytics = {},
+    productsCount = 0, featuredCount = 0, resortCount = 0, linkedCount = 0, recentProducts = [], pendingImportsCount = 0,
+  } = props;
 
   const [view, setView] = useState('dashboard');
   const [editor, setEditor] = useState(null);
@@ -2129,13 +2418,14 @@ export default function AdminIndex() {
 
   const nav = [
     { key: 'dashboard', label: 'Dashboard', icon: 'grid' },
-    { key: 'products', label: 'Products', icon: 'box', badge: products.length },
+    { key: 'analytics', label: 'Analytics', icon: 'chart' },
+    { key: 'products', label: 'Products', icon: 'box', badge: productsCount },
     { key: 'categories', label: 'Categories', icon: 'sparkle' },
     { key: 'looks', label: 'Style the Look', icon: 'bookmark' },
     { key: 'videos', label: 'Videos', icon: 'image' },
     { key: 'journal', label: 'Journal', icon: 'link' },
     { key: 'occasions', label: 'Occasions', icon: 'heart' },
-    { key: 'bulk-imports', label: 'Bulk Uploads', icon: 'upload', badge: bulkImports.filter((b) => b.status === 'processing').length || null },
+    { key: 'bulk-imports', label: 'Bulk Uploads', icon: 'upload', badge: pendingImportsCount || null },
     { key: 'settings', label: 'Settings', icon: 'edit' },
   ];
 
@@ -2165,15 +2455,57 @@ export default function AdminIndex() {
         </aside>
 
         <main className="adm-main">
-          {view === 'dashboard' && <Dashboard products={products} settings={settings} onAdd={() => setEditor({})} onGo={setView} />}
-          {view === 'products' && <ProductsView products={products} categories={categories} onAdd={() => setEditor({})} onEdit={(p) => setEditor(p)} onDelete={deleteProduct} onToast={admToast} />}
-          {view === 'categories' && <CategoriesView categories={categories} onToast={admToast} />}
-          {view === 'looks' && <LooksView looks={looks} products={products} onToast={admToast} />}
-          {view === 'videos' && <VideosAdminView videos={videos} products={products} onToast={admToast} />}
-          {view === 'journal' && <JournalView articles={articles} products={products} onToast={admToast} />}
-          {view === 'occasions' && <OccasionsAdminView occasions={occasions} onToast={admToast} />}
-          {view === 'bulk-imports' && <BulkImportsView batches={bulkImports} />}
-          {view === 'settings' && <SettingsView settings={settings} onToast={admToast} />}
+          {view === 'dashboard' && (
+            <Dashboard
+              productsCount={productsCount} featuredCount={featuredCount} resortCount={resortCount} linkedCount={linkedCount}
+              recentProducts={recentProducts} onAdd={() => setEditor({})} onGo={setView}
+            />
+          )}
+          {view === 'analytics' && (
+            <Deferred data="analytics" fallback={<AdmTabSkeleton />}>
+              <AnalyticsView analytics={analytics} />
+            </Deferred>
+          )}
+          {view === 'products' && (
+            <Deferred data={['products', 'categories']} fallback={<AdmTabSkeleton />}>
+              <ProductsView products={products} categories={categories} onAdd={() => setEditor({})} onEdit={(p) => setEditor(p)} onDelete={deleteProduct} onToast={admToast} />
+            </Deferred>
+          )}
+          {view === 'categories' && (
+            <Deferred data="categories" fallback={<AdmTabSkeleton />}>
+              <CategoriesView categories={categories} onToast={admToast} />
+            </Deferred>
+          )}
+          {view === 'looks' && (
+            <Deferred data={['looks', 'products']} fallback={<AdmTabSkeleton />}>
+              <LooksView looks={looks} products={products} onToast={admToast} />
+            </Deferred>
+          )}
+          {view === 'videos' && (
+            <Deferred data={['videos', 'products']} fallback={<AdmTabSkeleton />}>
+              <VideosAdminView videos={videos} products={products} onToast={admToast} />
+            </Deferred>
+          )}
+          {view === 'journal' && (
+            <Deferred data={['articles', 'products']} fallback={<AdmTabSkeleton />}>
+              <JournalView articles={articles} products={products} onToast={admToast} />
+            </Deferred>
+          )}
+          {view === 'occasions' && (
+            <Deferred data="occasions" fallback={<AdmTabSkeleton />}>
+              <OccasionsAdminView occasions={occasions} onToast={admToast} />
+            </Deferred>
+          )}
+          {view === 'bulk-imports' && (
+            <Deferred data="bulkImports" fallback={<AdmTabSkeleton />}>
+              <BulkImportsView batches={bulkImports} />
+            </Deferred>
+          )}
+          {view === 'settings' && (
+            <Deferred data="settings" fallback={<AdmTabSkeleton />}>
+              <SettingsView settings={settings} onToast={admToast} />
+            </Deferred>
+          )}
         </main>
       </div>
 

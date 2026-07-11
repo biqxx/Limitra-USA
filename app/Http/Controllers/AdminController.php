@@ -13,15 +13,56 @@ use App\Models\ProductDetail;
 use App\Models\SiteSetting;
 use App\Models\Subcategory;
 use App\Models\Video;
+use App\Services\AnalyticsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class AdminController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $products = Product::with(['category', 'subcategory', 'detail'])
+        // Eager: small, needed for the Dashboard tab and nav badges to render
+        // instantly on first paint, without waiting on the full deferred lists.
+        $recentProducts = Product::with('category')->orderByDesc('created_at')->limit(5)->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'image' => $p->image,
+                'brand' => $p->brand,
+                'name' => $p->name,
+                'category' => $p->category?->name,
+                'price' => $p->price,
+            ]);
+
+        return Inertia::render('Admin/Index', [
+            'productsCount' => Product::count(),
+            'featuredCount' => Product::where('is_featured', true)->count(),
+            'resortCount' => Product::where('is_resort', true)->count(),
+            'linkedCount' => Product::whereNotNull('affiliate_url')->count(),
+            'recentProducts' => $recentProducts,
+            'pendingImportsCount' => BulkImportBatch::where('status', 'processing')->count(),
+
+            // Deferred: fetched automatically in grouped background requests
+            // right after first paint, not blocking it. See AdminController
+            // notes / the Analytics plan for why this split exists.
+            'products' => Inertia::defer(fn () => $this->productsForAdmin(), 'catalog'),
+            'categories' => Inertia::defer(fn () => $this->categoriesForAdmin(), 'catalog'),
+            'occasions' => Inertia::defer(fn () => Occasion::orderBy('sort_order')->get(), 'content'),
+            'articles' => Inertia::defer(fn () => Article::orderByDesc('id')->get(), 'content'),
+            'looks' => Inertia::defer(fn () => Look::orderByDesc('id')->get(), 'content'),
+            'videos' => Inertia::defer(fn () => Video::orderBy('sort_order')->get(), 'content'),
+            'bulkImports' => Inertia::defer(fn () => BulkImportBatch::orderByDesc('id')->limit(50)->get(), 'ops'),
+            'settings' => Inertia::defer(fn () => SiteSetting::allAsMap(), 'settings'),
+            'analytics' => Inertia::defer(
+                fn () => app(AnalyticsService::class)->summary((int) $request->integer('range', 30)),
+                'analytics'
+            ),
+        ]);
+    }
+
+    private function productsForAdmin()
+    {
+        return Product::with(['category', 'subcategory', 'detail'])
             ->get()
             ->map(fn ($p) => [
                 'id' => $p->id,
@@ -51,8 +92,11 @@ class AdminController extends Controller
                     'specs' => $p->detail->specs ?? [],
                 ] : ['about' => [], 'highlights' => [], 'specs' => []],
             ]);
+    }
 
-        $categories = Category::with('subcategories')->orderBy('sort_order')->get()
+    private function categoriesForAdmin()
+    {
+        return Category::with('subcategories')->orderBy('sort_order')->get()
             ->map(fn ($c) => [
                 'id' => $c->id,
                 'name' => $c->name,
@@ -63,17 +107,6 @@ class AdminController extends Controller
                 'bannerImg' => $c->banner_img,
                 'subs' => $c->subcategories->pluck('name')->values()->toArray(),
             ]);
-
-        return Inertia::render('Admin/Index', [
-            'products' => $products,
-            'categories' => $categories,
-            'occasions' => Occasion::orderBy('sort_order')->get(),
-            'articles' => Article::orderByDesc('id')->get(),
-            'looks' => Look::orderByDesc('id')->get(),
-            'videos' => Video::orderBy('sort_order')->get(),
-            'settings' => SiteSetting::allAsMap(),
-            'bulkImports' => BulkImportBatch::orderByDesc('id')->limit(50)->get(),
-        ]);
     }
 
     // ── Bulk import ───────────────────────────────────────────

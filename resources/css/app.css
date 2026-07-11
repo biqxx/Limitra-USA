@@ -1765,7 +1765,7 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .adm-btn.sm { padding: 8px 12px; font-size: 12.5px; }
 
 /* stat cards */
-.adm-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 30px; }
+.adm-stats { display: grid; grid-template-columns: repeat(4, 1fr); align-content: start; align-items: start; gap: 18px; margin-bottom: 30px; }
 @media (max-width: 1100px) { .adm-stats { grid-template-columns: repeat(2, 1fr); } }
 .adm-stat { background: var(--surface); border: 1px solid var(--line); border-radius: 13px; padding: 20px 22px; }
 .adm-stat .ic { width: 40px; height: 40px; border-radius: 10px; background: color-mix(in oklab, var(--accent) 16%, var(--surface)); color: var(--accent); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
@@ -1813,6 +1813,37 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .adm-empty svg { color: var(--line); margin-bottom: 16px; }
 .adm-empty h3 { font-family: var(--font-display,"Bodoni Moda"),serif; font-weight: 500; font-size: 22px; color: var(--brand); margin: 0 0 6px; }
 .adm-empty p { margin: 0 0 20px; }
+
+/* analytics */
+.adm-stat-hero { border-color: color-mix(in oklab, var(--accent) 45%, var(--line)); }
+.adm-stat-hero .ic { background: var(--accent); color: var(--on-brand); }
+.adm-stat-hero .num { font-size: 40px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.adm-stat .num { font-variant-numeric: tabular-nums; }
+
+.adm-range-switch { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+.adm-range-switch button { border: none; background: none; padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: background .18s, color .18s; }
+.adm-range-switch button.active { background: var(--brand); color: var(--on-brand); }
+.adm-range-switch button:disabled { cursor: default; opacity: .6; }
+
+.adm-chart-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.adm-callout { font-size: 13.5px; color: var(--ink); margin: 10px 0 0; }
+.adm-callout strong { color: var(--brand); font-family: var(--font-display,"Bodoni Moda"),serif; }
+
+.adm-badge-delta { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.adm-badge-delta.up { background: color-mix(in oklab, #2e7d4f 14%, var(--surface)); color: #2e7d4f; }
+.adm-badge-delta.down { background: color-mix(in oklab, #c0392b 14%, var(--surface)); color: #c0392b; }
+
+.adm-legend { display: flex; flex-direction: column; gap: 9px; }
+.adm-legend .row { display: flex; align-items: center; gap: 9px; font-size: 13.5px; }
+.adm-legend .sw { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+.adm-legend .name { flex: 1; color: var(--ink); }
+.adm-legend .pct { font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
+
+.adm-table-scroll { overflow-x: auto; }
+.adm-table-scroll .adm-table { min-width: 640px; }
+
+.adm-skel { background: linear-gradient(90deg, var(--line) 25%, var(--card) 50%, var(--line) 75%); background-size: 200% 100%; border-radius: 7px; animation: adm-skel-pulse 1.3s ease-in-out infinite; }
+@keyframes adm-skel-pulse { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* form */
 .adm-form { display: grid; gap: 20px; }
