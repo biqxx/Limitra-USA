@@ -457,6 +457,11 @@ class AdminController extends Controller
         return $this->queueBulkImport($request, 'videos');
     }
 
+    public function bulkImportConversions(Request $request)
+    {
+        return $this->queueBulkImport($request, 'conversions');
+    }
+
     public function uploadImage(Request $request)
     {
         $request->validate([

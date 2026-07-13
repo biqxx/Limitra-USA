@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Article;
 use App\Models\Category;
+use App\Models\Click;
+use App\Models\Conversion;
 use App\Models\Look;
 use App\Models\Occasion;
 use App\Models\Product;
@@ -27,6 +29,7 @@ class BulkImportService
             'articles' => $this->importArticles($items),
             'looks' => $this->importLooks($items),
             'videos' => $this->importVideos($items),
+            'conversions' => $this->importConversions($items),
             default => throw new \InvalidArgumentException("Unknown bulk import type [{$type}]."),
         };
     }
@@ -304,6 +307,56 @@ class BulkImportService
                         ]);
                         $created++;
                     }
+                } catch (\Throwable $e) {
+                    $errors[] = ['row' => $i, 'summary' => $summary, 'message' => $e->getMessage()];
+                }
+            }
+        });
+
+        return compact('created', 'updated', 'skipped', 'errors');
+    }
+
+    /**
+     * Matches each row to the Click that produced it via `sub_id` (appended to
+     * the outbound affiliate URL by RedirectController::go), then upserts a
+     * Conversion for that click. Rows whose sub_id has no matching click are
+     * skipped with an error rather than guessed at.
+     */
+    public function importConversions(array $items): array
+    {
+        $created = 0; $updated = 0; $skipped = 0; $errors = [];
+
+        DB::transaction(function () use ($items, &$created, &$updated, &$skipped, &$errors) {
+            foreach ($items as $i => $item) {
+                $action = $item['action'] ?? 'skip';
+                if ($action === 'skip') { $skipped++; continue; }
+                $data = $item['data'] ?? [];
+                $summary = 'SubID ' . ($data['sub_id'] ?? ('Row ' . ($i + 1)));
+
+                try {
+                    $click = Click::where('sub_id', $data['sub_id'] ?? null)->first();
+                    if (! $click) {
+                        $skipped++;
+                        $errors[] = ['row' => $i, 'summary' => $summary, 'message' => "No matching click for SubID \"{$data['sub_id']}\"."];
+                        continue;
+                    }
+
+                    $product = Product::find($click->product_id);
+
+                    $conversion = Conversion::updateOrCreate(
+                        ['click_id' => $click->id],
+                        [
+                            'product_id' => $click->product_id,
+                            'retailer_id' => $product?->retailer_id,
+                            'order_date' => $data['order_date'] ?? now()->toDateString(),
+                            'units' => $data['units'] ?? 1,
+                            'sale_amount' => $data['sale_amount'] ?? 0,
+                            'commission_amount' => $data['commission_amount'] ?? 0,
+                            'status' => $data['status'] ?? 'pending',
+                        ]
+                    );
+
+                    $conversion->wasRecentlyCreated ? $created++ : $updated++;
                 } catch (\Throwable $e) {
                     $errors[] = ['row' => $i, 'summary' => $summary, 'message' => $e->getMessage()];
                 }

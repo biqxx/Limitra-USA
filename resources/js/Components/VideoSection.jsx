@@ -9,6 +9,18 @@ const TAG_COLORS_V = {
   "Lifestyle": "var(--accent)",
 };
 
+function trackVideoView(video) {
+  if (typeof window === 'undefined') return;
+  const id = video?.vid_id || video?.id;
+  if (!id) return;
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  fetch(`/videos/${id}/track-view`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token },
+    body: JSON.stringify({ source_page: window.location.pathname }),
+  }).catch(() => {});
+}
+
 function VideoPlayer({ video, isActive = true }) {
   const [playing, setPlaying] = useState(false);
 
@@ -63,8 +75,8 @@ function VideoPlayer({ video, isActive = true }) {
       <div
         role={hasSource ? "button" : undefined}
         tabIndex={hasSource ? 0 : undefined}
-        onClick={hasSource ? () => setPlaying(true) : undefined}
-        onKeyDown={hasSource ? (e) => e.key === "Enter" && setPlaying(true) : undefined}
+        onClick={hasSource ? () => { setPlaying(true); trackVideoView(video); } : undefined}
+        onKeyDown={hasSource ? (e) => { if (e.key === "Enter") { setPlaying(true); trackVideoView(video); } } : undefined}
         style={{
           position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
           background: "rgba(0,0,0,.3)", zIndex: 5, cursor: hasSource ? "pointer" : "default",

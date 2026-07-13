@@ -99,7 +99,9 @@ class ChatController extends Controller
     private function detectIntent(AiProvider $provider, array $messages): array
     {
         $system = <<<SYS
-You are a classifier for a shopping assistant. Analyze the conversation and decide if products need to be looked up.
+You are a JSON-only classifier for a shopping assistant. Analyze the conversation and decide if products need to be looked up.
+
+CRITICAL: Reply with RAW JSON only — no markdown, no code fences (```), no explanation, no extra text whatsoever.
 
 If yes, build a "search" object using any combination of these fields (set unused fields to null):
 
@@ -107,28 +109,37 @@ If yes, build a "search" object using any combination of these fields (set unuse
 - "name"        : searches product name only — use when text is null and you want name-specific search
 - "description" : searches product description only — use when text is null and you want description-specific search
 - "brand"       : partial match on brand name e.g. "armani", "nike"
-- "price"       : price filter. Format: {"op": "lt|lte|gt|gte|eq|between", "value": 200}
-                  For between: {"op": "between", "value": [50, 200]}
+- "price"       : MUST use EXACTLY this format: {"op": "lt|lte|gt|gte|eq|between", "value": NUMBER}
+                  "under $100" → {"op": "lte", "value": 100}
+                  "less than $50" → {"op": "lt", "value": 50}
+                  "over $200" → {"op": "gt", "value": 200}
+                  "between $50 and $200" → {"op": "between", "value": [50, 200]}
+                  DO NOT use keys like "max", "min", "under", "above" — only "op" and "value" are valid.
 
 All non-null filters are combined with AND.
 Common examples:
   General search → {"text": "beach bag", "brand": null, "name": null, "description": null, "price": null}
   Brand + type  → {"text": "handbag", "brand": "gucci", "name": null, "description": null, "price": null}
   Budget range  → {"text": "swimwear", "brand": null, "name": null, "description": null, "price": {"op": "lte", "value": 150}}
+  Gift under $100 → {"text": "gift", "brand": null, "name": null, "description": null, "price": {"op": "lte", "value": 100}}
   Name only     → {"text": null, "brand": null, "name": "linen blazer", "description": null, "price": null}
   Brand budget  → {"text": null, "brand": "armani", "name": null, "description": "hand bag", "price": {"op": "lt", "value": 200}}
 
-Reply ONLY with valid JSON, no other text:
+Reply ONLY with raw valid JSON (no code fences):
 {"needs_products": true, "search": {"text": "...", "name": null, "description": null, "brand": null, "price": null}}
 or:
 {"needs_products": false, "search": null}
 SYS;
 
         try {
-            $raw = $provider->chat($system, $messages, 120);
+            $raw = $provider->chat($system, $messages, 200, false);
             Log::debug('[Chat] Intent raw response', ['raw' => $raw]);
 
-            preg_match('/\{.*\}/s', $raw, $match);
+            // Strip markdown code fences the model may wrap around the JSON
+            $cleaned = preg_replace('/^```(?:json)?\s*/i', '', trim($raw));
+            $cleaned = preg_replace('/\s*```$/', '', $cleaned);
+
+            preg_match('/\{.*\}/s', $cleaned, $match);
             $json = $match[0] ?? null;
 
             if (! $json) {
@@ -143,6 +154,11 @@ SYS;
                 return ['needs_products' => false, 'search' => null];
             }
 
+            // Normalize price: model sometimes returns {min, max} instead of {op, value}
+            if (isset($data['search']['price']) && is_array($data['search']['price'])) {
+                $data['search']['price'] = $this->normalizePriceFilter($data['search']['price']);
+            }
+
             return [
                 'needs_products' => (bool) ($data['needs_products'] ?? false),
                 'search'         => $data['search'] ?? null,
@@ -154,6 +170,35 @@ SYS;
             ]);
             return ['needs_products' => false, 'search' => null];
         }
+    }
+
+    /**
+     * Normalize various price formats the AI may return into the canonical
+     * {"op": "...", "value": ...} format that filterByPrice() expects.
+     */
+    private function normalizePriceFilter(array $price): array
+    {
+        // Already in canonical form
+        if (isset($price['op'], $price['value'])) {
+            return $price;
+        }
+
+        $min = $price['min'] ?? $price['gte'] ?? $price['gt'] ?? null;
+        $max = $price['max'] ?? $price['lte'] ?? $price['lt'] ?? null;
+
+        if ($min !== null && $max !== null) {
+            return ['op' => 'between', 'value' => [(float) $min, (float) $max]];
+        }
+        if ($max !== null) {
+            return ['op' => 'lte', 'value' => (float) $max];
+        }
+        if ($min !== null) {
+            return ['op' => 'gte', 'value' => (float) $min];
+        }
+
+        // Unrecognised format — log and discard
+        Log::warning('[Chat] Intent — unrecognised price format, ignoring', ['price' => $price]);
+        return ['op' => null, 'value' => null];
     }
 
     // ── Search filters ────────────────────────────────────────────────────────

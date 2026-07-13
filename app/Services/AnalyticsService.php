@@ -2,22 +2,19 @@
 
 namespace App\Services;
 
-use App\Models\Category;
-use App\Models\Product;
-use App\Models\Retailer;
+use App\Models\ArticleView;
+use App\Models\Click;
+use App\Models\Conversion;
+use App\Models\VideoView;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Builds the Admin Analytics Dashboard payload.
- *
- * Every widget method below is a placeholder — clicks/conversions have no
- * real rows yet — but each is documented with the query it will become once
- * they do. The numbers are deterministic (seeded by date/product/category/
- * retailer) so a reload doesn't jump around, and they're layered on the real
- * product/category/retailer catalog so the dashboard reads like this store.
- * Swap a method's body for the real query; the return shape is the contract
- * the frontend already relies on, so nothing else needs to change.
+ * Builds the Admin Analytics Dashboard payload from real clicks/conversions/
+ * article_views/video_views. Every widget's `hasData` flag reflects whether
+ * that query actually returned rows — until real traffic/imports accumulate,
+ * widgets correctly show their "No conversions yet in this range" state
+ * instead of fabricating numbers.
  */
 class AnalyticsService
 {
@@ -34,102 +31,67 @@ class AnalyticsService
             'topProducts' => $this->topProducts($days),
             'clicksByDevice' => $this->clicksByDevice($days),
             'topSourcePages' => $this->topSourcePages($days),
+            'topArticles' => $this->topArticles($days),
+            'topVideos' => $this->topVideos($days),
         ];
     }
 
-    // ── Placeholder helpers ─────────────────────────────────────
-
-    /** Stable pseudo-random float in [0, 1) for a given seed string. */
-    private function rand(string $seed): float
+    private function since(int $days): Carbon
     {
-        return hexdec(substr(md5($seed), 0, 8)) / 0xFFFFFFFF;
-    }
-
-    private function between(string $seed, float $min, float $max): float
-    {
-        return $min + $this->rand($seed) * ($max - $min);
-    }
-
-    private function categories(): Collection
-    {
-        return Category::orderBy('sort_order')->get(['id', 'name']);
-    }
-
-    private function retailers(): Collection
-    {
-        return Retailer::orderBy('name')->get(['id', 'name']);
-    }
-
-    private function catalogSample(int $limit = 60): Collection
-    {
-        return Product::with('category')
-            ->whereNotNull('retailer_id')
-            ->orderBy('id')
-            ->limit($limit)
-            ->get();
+        return Carbon::today()->subDays($days - 1)->startOfDay();
     }
 
     /**
      * SQL: SELECT DATE(created_at) d, COUNT(*) clicks FROM clicks
-     *      WHERE created_at >= NOW() - INTERVAL ? DAY GROUP BY d
-     * (joined conceptually with the equivalent per-day conversions query) —
-     * this is the shared daily series every widget below slices from, so
-     * clicks/orders/sales/commission stay internally consistent everywhere.
+     *        WHERE created_at >= NOW() - INTERVAL ? DAY GROUP BY d;
+     *      SELECT order_date d, status, COUNT(*) orders, SUM(sale_amount), SUM(commission_amount)
+     *        FROM conversions WHERE order_date >= NOW() - INTERVAL ? DAY GROUP BY d, status
+     * The shared daily series every other widget slices from, so clicks/
+     * orders/sales/commission stay internally consistent everywhere.
      */
     private function dailySeries(int $days): array
     {
+        $since = $this->since($days);
+        $sinceDate = $since->toDateString();
+
+        $clicksByDay = Click::where('created_at', '>=', $since)
+            ->selectRaw('DATE(created_at) as d, COUNT(*) as c')
+            ->groupBy('d')
+            ->pluck('c', 'd');
+
+        // order_date is a DATE column, but Eloquent's `date` cast doesn't
+        // truncate the time component on save — normalize with DATE() so
+        // rows group by calendar day regardless of what got stored.
+        $conversionsByDay = Conversion::where('order_date', '>=', $sinceDate)
+            ->selectRaw('DATE(order_date) as d, status, COUNT(*) as orders, SUM(sale_amount) as sale_amount, SUM(commission_amount) as commission_amount')
+            ->groupBy(DB::raw('DATE(order_date)'), 'status')
+            ->get()
+            ->groupBy('d');
+
         $out = [];
-        $today = Carbon::today();
-
         for ($i = $days - 1; $i >= 0; $i--) {
-            $date = $today->copy()->subDays($i);
-            $key = $date->toDateString();
+            $key = Carbon::today()->subDays($i)->toDateString();
 
-            $clicks = (int) round($this->between("clicks:$key", 90, 260));
-            $convRate = $this->between("convrate:$key", 0.018, 0.055);
-            $orders = (int) round($clicks * $convRate);
-            $aov = $this->between("aov:$key", 55, 190);
-            $sale = round($orders * $aov, 2);
-            $commissionRate = $this->between("comm:$key", 0.05, 0.12);
-            $commission = round($sale * $commissionRate, 2);
-
-            // Split the day's commission across the pipeline: older days have
-            // had more time to settle toward confirmed/paid, recent days are
-            // still mostly pending. Reversed is a flat risk slice regardless
-            // of age (returns/fraud), consistent across the whole range.
-            $reversedShare = $this->between("rev:$key", 0.02, 0.07);
-            $settledShare = min(0.92, 0.15 + $i * 0.03);
-            $paidShare = max(0, $settledShare - 0.25);
-            $confirmedShare = max(0, $settledShare - $paidShare);
-            $pendingShare = max(0, 1 - $settledShare - $reversedShare);
+            $dayRows = $conversionsByDay->get($key, collect());
+            $nonReversed = $dayRows->whereNotIn('status', ['reversed']);
+            $byStatus = $dayRows->keyBy('status');
 
             $out[] = [
                 'date' => $key,
-                'clicks' => $clicks,
-                'orders' => $orders,
-                'sale_amount' => $sale,
-                'commission_amount' => $commission,
-                'pending' => round($commission * $pendingShare, 2),
-                'confirmed' => round($commission * $confirmedShare, 2),
-                'paid' => round($commission * $paidShare, 2),
-                'reversed' => round($commission * $reversedShare, 2),
+                'clicks' => (int) ($clicksByDay[$key] ?? 0),
+                'orders' => (int) $nonReversed->sum('orders'),
+                'sale_amount' => (float) $nonReversed->sum('sale_amount'),
+                'commission_amount' => (float) $nonReversed->sum('commission_amount'),
+                'pending' => (float) ($byStatus->get('pending')->commission_amount ?? 0),
+                'confirmed' => (float) ($byStatus->get('confirmed')->commission_amount ?? 0),
+                'paid' => (float) ($byStatus->get('paid')->commission_amount ?? 0),
+                'reversed' => (float) ($byStatus->get('reversed')->commission_amount ?? 0),
             ];
         }
 
         return $out;
     }
 
-    /**
-     * SQL:
-     *   SELECT COUNT(*) FROM clicks WHERE created_at >= NOW() - INTERVAL ? DAY;
-     *   SELECT COUNT(*), SUM(sale_amount), SUM(commission_amount) FROM conversions
-     *     WHERE order_date >= NOW() - INTERVAL ? DAY AND status != 'reversed';
-     *   SELECT status, SUM(commission_amount) FROM conversions
-     *     WHERE order_date >= NOW() - INTERVAL ? DAY GROUP BY status
-     *     (feeds reversal_rate/settled_rate — the only two places this
-     *     query's reversed slice is surfaced, now that there's no dedicated
-     *     pipeline widget).
-     */
     private function kpis(int $days): array
     {
         $rows = $this->dailySeries($days);
@@ -160,11 +122,8 @@ class AnalyticsService
     }
 
     /**
-     * SQL: SELECT order_date, SUM(sale_amount) FROM conversions
-     *      WHERE order_date >= NOW() - INTERVAL ? DAY AND status != 'reversed'
-     *      GROUP BY order_date ORDER BY order_date
-     * Plus a trailing 7-day moving average computed here over that series,
-     * and a % change against the immediately preceding period of equal length.
+     * Daily sales series (from dailySeries) plus a trailing 7-day moving
+     * average, and a % change against the immediately preceding period.
      */
     private function salesTrend(int $days): array
     {
@@ -200,27 +159,26 @@ class AnalyticsService
      */
     private function salesByCategory(int $days): array
     {
-        $categories = $this->categories();
-        if ($categories->isEmpty()) {
+        $rows = Conversion::query()
+            ->join('products', 'products.id', '=', 'conversions.product_id')
+            ->join('categories', 'categories.id', '=', 'products.category_id')
+            ->where('conversions.order_date', '>=', $this->since($days)->toDateString())
+            ->where('conversions.status', '!=', 'reversed')
+            ->selectRaw('categories.name as category, SUM(conversions.sale_amount) as sales')
+            ->groupBy('categories.name')
+            ->orderByDesc('sales')
+            ->get();
+
+        if ($rows->isEmpty()) {
             return ['items' => [], 'top_category' => null, 'hasData' => false];
         }
 
-        $totalSales = $this->kpis($days)['sales_volume'];
-        $weights = $categories->mapWithKeys(fn ($c) => [$c->id => $this->between("cat:{$c->id}:$days", 0.4, 1.6)]);
-        $weightSum = $weights->sum();
-
-        $items = $categories->map(function ($c) use ($weights, $weightSum, $totalSales) {
-            $share = $weightSum > 0 ? $weights[$c->id] / $weightSum : 0;
-            return [
-                'category' => $c->name,
-                'sales' => round($totalSales * $share, 2),
-            ];
-        })->sortByDesc('sales')->values();
+        $items = $rows->map(fn ($r) => ['category' => $r->category, 'sales' => round((float) $r->sales, 2)]);
 
         return [
             'items' => $items->all(),
             'top_category' => $items->first()['category'] ?? null,
-            'hasData' => $totalSales > 0,
+            'hasData' => true,
         ];
     }
 
@@ -232,28 +190,27 @@ class AnalyticsService
      */
     private function retailerRatio(int $days): array
     {
-        $retailers = $this->retailers();
-        if ($retailers->isEmpty()) {
+        $rows = Conversion::query()
+            ->join('retailers', 'retailers.id', '=', 'conversions.retailer_id')
+            ->where('conversions.order_date', '>=', $this->since($days)->toDateString())
+            ->where('conversions.status', '!=', 'reversed')
+            ->selectRaw('retailers.name as retailer, SUM(conversions.sale_amount) as sales')
+            ->groupBy('retailers.name')
+            ->orderByDesc('sales')
+            ->get();
+
+        $totalSales = (float) $rows->sum('sales');
+        if ($rows->isEmpty() || $totalSales <= 0) {
             return ['items' => [], 'hasData' => false];
         }
 
-        $totalSales = $this->kpis($days)['sales_volume'];
-        $weights = $retailers->mapWithKeys(fn ($r) => [$r->id => $this->between("ret:{$r->id}:$days", 0.3, 1.7)]);
-        $weightSum = $weights->sum();
+        $items = $rows->map(fn ($r) => [
+            'retailer' => $r->retailer,
+            'sales' => round((float) $r->sales, 2),
+            'pct' => round(((float) $r->sales / $totalSales) * 100, 1),
+        ]);
 
-        $items = $retailers->map(function ($r) use ($weights, $weightSum, $totalSales) {
-            $share = $weightSum > 0 ? $weights[$r->id] / $weightSum : 0;
-            return [
-                'retailer' => $r->name,
-                'sales' => round($totalSales * $share, 2),
-                'pct' => round($share * 100, 1),
-            ];
-        })->sortByDesc('sales')->values();
-
-        return [
-            'items' => $items->all(),
-            'hasData' => $totalSales > 0,
-        ];
+        return ['items' => $items->all(), 'hasData' => true];
     }
 
     /**
@@ -265,34 +222,36 @@ class AnalyticsService
      */
     private function topProducts(int $days): array
     {
-        $products = $this->catalogSample();
-        if ($products->isEmpty()) {
+        $rows = Conversion::query()
+            ->join('products', 'products.id', '=', 'conversions.product_id')
+            ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+            ->where('conversions.order_date', '>=', $this->since($days)->toDateString())
+            ->where('conversions.status', '!=', 'reversed')
+            ->selectRaw('products.id as id, products.name as name, products.brand as brand, products.image as image,
+                products.retailer as retailer, categories.name as category,
+                SUM(conversions.units) as units, SUM(conversions.sale_amount) as sales, SUM(conversions.commission_amount) as commission')
+            ->groupBy('products.id', 'products.name', 'products.brand', 'products.image', 'products.retailer', 'categories.name')
+            ->orderByDesc('units')
+            ->take(5)
+            ->get();
+
+        if ($rows->isEmpty()) {
             return ['items' => [], 'hasData' => false];
         }
 
-        $items = $products->map(function ($p) use ($days) {
-            $units = (int) round($this->between("units:{$p->id}:$days", 4, 60) * ($days / 30));
-            $unitPrice = $this->between("price:{$p->id}", 40, 320);
-            $sales = round($units * $unitPrice, 2);
-            $commission = round($sales * $this->between("prodcomm:{$p->id}", 0.05, 0.12), 2);
+        $items = $rows->map(fn ($r) => [
+            'id' => $r->id,
+            'name' => $r->name,
+            'brand' => $r->brand,
+            'image' => $r->image,
+            'category' => $r->category,
+            'retailer' => $r->retailer,
+            'units' => (int) $r->units,
+            'sales' => round((float) $r->sales, 2),
+            'commission' => round((float) $r->commission, 2),
+        ]);
 
-            return [
-                'id' => $p->id,
-                'name' => $p->name,
-                'brand' => $p->brand,
-                'image' => $p->image,
-                'category' => $p->category?->name,
-                'retailer' => $p->retailer,
-                'units' => max(1, $units),
-                'sales' => $sales,
-                'commission' => $commission,
-            ];
-        })->sortByDesc('units')->take(5)->values();
-
-        return [
-            'items' => $items->all(),
-            'hasData' => $items->isNotEmpty(),
-        ];
+        return ['items' => $items->all(), 'hasData' => true];
     }
 
     /**
@@ -301,20 +260,23 @@ class AnalyticsService
      */
     private function clicksByDevice(int $days): array
     {
-        $totalClicks = $this->kpis($days)['clicks'];
-        if ($totalClicks <= 0) {
+        $since = $this->since($days);
+        $total = Click::where('created_at', '>=', $since)->count();
+        if ($total <= 0) {
             return ['items' => [], 'hasData' => false];
         }
 
-        $devices = ['Mobile', 'Desktop', 'Tablet'];
-        $weights = collect($devices)->mapWithKeys(fn ($d) => [$d => $this->between("device:$d:$days", 0.5, 1.6)]);
-        $weightSum = $weights->sum();
+        $rows = Click::where('created_at', '>=', $since)
+            ->selectRaw("COALESCE(device, 'Desktop') as device, COUNT(*) as clicks")
+            ->groupBy('device')
+            ->orderByDesc('clicks')
+            ->get();
 
-        $items = collect($devices)->map(function ($d) use ($weights, $weightSum, $totalClicks) {
-            $share = $weightSum > 0 ? $weights[$d] / $weightSum : 0;
-            $clicks = (int) round($totalClicks * $share);
-            return ['device' => $d, 'clicks' => $clicks, 'pct' => round($share * 100, 1)];
-        })->sortByDesc('clicks')->values();
+        $items = $rows->map(fn ($r) => [
+            'device' => $r->device,
+            'clicks' => (int) $r->clicks,
+            'pct' => round(((int) $r->clicks / $total) * 100, 1),
+        ]);
 
         return ['items' => $items->all(), 'hasData' => true];
     }
@@ -326,20 +288,87 @@ class AnalyticsService
      */
     private function topSourcePages(int $days): array
     {
-        $totalClicks = $this->kpis($days)['clicks'];
-        if ($totalClicks <= 0) {
+        $since = $this->since($days);
+        $total = Click::where('created_at', '>=', $since)->count();
+
+        $rows = Click::where('created_at', '>=', $since)
+            ->whereNotNull('source_page')
+            ->selectRaw('source_page as page, COUNT(*) as clicks')
+            ->groupBy('source_page')
+            ->orderByDesc('clicks')
+            ->take(5)
+            ->get();
+
+        if ($rows->isEmpty() || $total <= 0) {
             return ['items' => [], 'hasData' => false];
         }
 
-        $pages = ['/', '/category/women', '/category/men', '/looks', '/guides', '/collection/new', '/collection/trending', '/collection/gifts'];
-        $weights = collect($pages)->mapWithKeys(fn ($p) => [$p => $this->between("page:$p:$days", 0.3, 1.8)]);
-        $weightSum = $weights->sum();
+        $items = $rows->map(fn ($r) => [
+            'page' => $r->page,
+            'clicks' => (int) $r->clicks,
+            'pct' => round(((int) $r->clicks / $total) * 100, 1),
+        ]);
 
-        $items = collect($pages)->map(function ($p) use ($weights, $weightSum, $totalClicks) {
-            $share = $weightSum > 0 ? $weights[$p] / $weightSum : 0;
-            $clicks = (int) round($totalClicks * $share);
-            return ['page' => $p, 'clicks' => $clicks, 'pct' => round($share * 100, 1)];
-        })->sortByDesc('clicks')->take(5)->values();
+        return ['items' => $items->all(), 'hasData' => true];
+    }
+
+    /**
+     * SQL: SELECT a.title, a.slug, a.img, COUNT(*) views FROM article_views v
+     *      JOIN articles a ON a.id = v.article_id
+     *      WHERE v.created_at >= NOW() - INTERVAL ? DAY
+     *      GROUP BY a.id ORDER BY views DESC LIMIT 5
+     */
+    private function topArticles(int $days): array
+    {
+        $rows = ArticleView::query()
+            ->join('articles', 'articles.id', '=', 'article_views.article_id')
+            ->where('article_views.created_at', '>=', $this->since($days))
+            ->selectRaw('articles.id as id, articles.title as title, articles.slug as slug, articles.img as img, COUNT(*) as views')
+            ->groupBy('articles.id', 'articles.title', 'articles.slug', 'articles.img')
+            ->orderByDesc('views')
+            ->take(5)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return ['items' => [], 'hasData' => false];
+        }
+
+        $items = $rows->map(fn ($r) => [
+            'title' => $r->title,
+            'slug' => $r->slug,
+            'img' => $r->img,
+            'views' => (int) $r->views,
+        ]);
+
+        return ['items' => $items->all(), 'hasData' => true];
+    }
+
+    /**
+     * SQL: SELECT v.title, v.thumb, COUNT(*) views FROM video_views vv
+     *      JOIN videos v ON v.id = vv.video_id
+     *      WHERE vv.created_at >= NOW() - INTERVAL ? DAY
+     *      GROUP BY v.id ORDER BY views DESC LIMIT 5
+     */
+    private function topVideos(int $days): array
+    {
+        $rows = VideoView::query()
+            ->join('videos', 'videos.id', '=', 'video_views.video_id')
+            ->where('video_views.created_at', '>=', $this->since($days))
+            ->selectRaw('videos.id as id, videos.title as title, videos.thumb as thumb, COUNT(*) as views')
+            ->groupBy('videos.id', 'videos.title', 'videos.thumb')
+            ->orderByDesc('views')
+            ->take(5)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return ['items' => [], 'hasData' => false];
+        }
+
+        $items = $rows->map(fn ($r) => [
+            'title' => $r->title,
+            'thumb' => $r->thumb,
+            'views' => (int) $r->views,
+        ]);
 
         return ['items' => $items->all(), 'hasData' => true];
     }

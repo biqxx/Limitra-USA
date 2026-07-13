@@ -679,6 +679,75 @@ function AnalyticsEmpty({ label }) {
   );
 }
 
+function downloadAnalyticsReport(analytics, range) {
+  const kpis = analytics.kpis || {};
+  const trend = analytics.salesTrend || { series: [] };
+  const lines = [];
+  const push = (row) => lines.push(row.map(csvCell).join(','));
+
+  push([`Limitra Analytics Report — last ${range} days`]);
+  push([]);
+
+  push(['KPI', 'Value']);
+  push(['Total clicks', kpis.clicks ?? 0]);
+  push(['Orders', kpis.orders ?? 0]);
+  push(['Conversion rate (%)', kpis.conversion_rate ?? 0]);
+  push(['Sales volume ($)', kpis.sales_volume ?? 0]);
+  push(['Avg. order value ($)', kpis.aov ?? 0]);
+  push(['Settled rate (%)', kpis.settled_rate ?? 0]);
+  push(['Reversal rate (%)', kpis.reversal_rate ?? 0]);
+  push(['Commission earned ($)', kpis.commission_earned ?? 0]);
+  push(['EPC ($)', kpis.epc ?? 0]);
+  push([]);
+
+  push(['Daily sales trend']);
+  push(['Date', 'Sales ($)', '7-day moving average ($)']);
+  (trend.series || []).forEach((d, i) => push([d.date, d.sales, (trend.moving_average || [])[i] ?? '']));
+  push([]);
+
+  push(['Sales by category']);
+  push(['Category', 'Sales ($)']);
+  (analytics.salesByCategory?.items || []).forEach((c) => push([c.category, c.sales]));
+  push([]);
+
+  push(['Retailer sales ratio']);
+  push(['Retailer', 'Sales ($)', 'Share (%)']);
+  (analytics.retailerRatio?.items || []).forEach((r) => push([r.retailer, r.sales, r.pct]));
+  push([]);
+
+  push(['Clicks by device']);
+  push(['Device', 'Clicks', 'Share (%)']);
+  (analytics.clicksByDevice?.items || []).forEach((d) => push([d.device, d.clicks, d.pct]));
+  push([]);
+
+  push(['Top source pages']);
+  push(['Page', 'Clicks']);
+  (analytics.topSourcePages?.items || []).forEach((p) => push([p.page, p.clicks]));
+  push([]);
+
+  push(['Top products']);
+  push(['Product', 'Brand', 'Category', 'Retailer', 'Units', 'Sales ($)', 'Commission ($)']);
+  (analytics.topProducts?.items || []).forEach((p) => push([p.name, p.brand, p.category, p.retailer, p.units, p.sales, p.commission]));
+  push([]);
+
+  push(['Top articles']);
+  push(['Title', 'Views']);
+  (analytics.topArticles?.items || []).forEach((a) => push([a.title, a.views]));
+  push([]);
+
+  push(['Top videos']);
+  push(['Title', 'Views']);
+  (analytics.topVideos?.items || []).forEach((v) => push([v.title, v.views]));
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `analytics-report-${range}d.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function AnalyticsView({ analytics }) {
   const [range, setRange] = useState(analytics.range || 30);
   const [loading, setLoading] = useState(false);
@@ -703,6 +772,8 @@ function AnalyticsView({ analytics }) {
   const topProducts = analytics.topProducts || { items: [] };
   const byDevice = analytics.clicksByDevice || { items: [] };
   const sourcePages = analytics.topSourcePages || { items: [] };
+  const topArticles = analytics.topArticles || { items: [] };
+  const topVideos = analytics.topVideos || { items: [] };
 
   const trendData = (trend.series || []).map((d, i) => ({
     date: d.date.slice(5),
@@ -736,10 +807,15 @@ function AnalyticsView({ analytics }) {
           <h1>Analytics</h1>
           <p>Affiliate performance — clicks, conversions, and commission earned.</p>
         </div>
-        <div className="adm-range-switch">
-          {[7, 14, 30].map((n) => (
-            <button key={n} className={range === n ? 'active' : ''} disabled={loading} onClick={() => setRangeAndReload(n)}>{n}d</button>
-          ))}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" className="adm-btn adm-btn-ghost" onClick={() => downloadAnalyticsReport(analytics, range)}>
+            <I.download /> Download report
+          </button>
+          <div className="adm-range-switch">
+            {[7, 14, 30].map((n) => (
+              <button key={n} className={range === n ? 'active' : ''} disabled={loading} onClick={() => setRangeAndReload(n)}>{n}d</button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -864,6 +940,40 @@ function AnalyticsView({ analytics }) {
                     <span style={{ display: 'block', height: '100%', width: `${(p.clicks / maxSourceClicks) * 100}%`, background: 'var(--accent)', borderRadius: 999 }}></span>
                   </span>
                   <span className="pct">{fmtNum(p.clicks)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="adm-grid2">
+        <div className="adm-panel">
+          <h2>Top articles</h2>
+          <p className="sub">Most-viewed Journal posts in this window.</p>
+          {!topArticles.hasData ? <AnalyticsEmpty label="No article views yet in this range." /> : (
+            <div className="adm-legend">
+              {topArticles.items.map((a) => (
+                <div className="row" key={a.slug}>
+                  {a.img ? <img src={a.img} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} /> : <span className="adm-thumb ph" style={{ width: 32, height: 32 }}><I.image width="14" height="14" /></span>}
+                  <span className="name" style={{ marginLeft: 9 }}>{a.title}</span>
+                  <span className="pct">{fmtNum(a.views)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="adm-panel">
+          <h2>Top videos</h2>
+          <p className="sub">Most-played videos in this window.</p>
+          {!topVideos.hasData ? <AnalyticsEmpty label="No video plays yet in this range." /> : (
+            <div className="adm-legend">
+              {topVideos.items.map((v, i) => (
+                <div className="row" key={i}>
+                  {v.thumb ? <img src={v.thumb} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} /> : <span className="adm-thumb ph" style={{ width: 32, height: 32 }}><I.image width="14" height="14" /></span>}
+                  <span className="name" style={{ marginLeft: 9 }}>{v.title}</span>
+                  <span className="pct">{fmtNum(v.views)}</span>
                 </div>
               ))}
             </div>

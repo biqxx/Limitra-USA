@@ -165,7 +165,7 @@ export function QuickView({ product, saved, onToggle, onClose, dealCta }) {
             {(product.features || []).map((f) => <li key={f}><I.check /> {f}</li>)}
           </ul>
           <div className="modal-actions">
-            <a className="btn btn-primary btn-block" href={product.affiliate_url || "#"} target="_blank" rel="noopener noreferrer sponsored">
+            <a className="btn btn-primary btn-block" href={product.affiliate_url ? `/go/${product.id}` : "#"} target="_blank" rel="noopener noreferrer sponsored">
               {dealCta && dealCta !== "Buy Now" ? `${dealCta} at ${product.retailer}` : shopCta()} <I.external />
             </a>
             <Link className={"btn btn-outline btn-block"} href={`/product/${product.slug || product.id}`}>

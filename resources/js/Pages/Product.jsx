@@ -138,7 +138,7 @@ export default function Product() {
             <p className="pd-lead">{product.description}</p>
 
             <div className="pd-actions">
-              <a className="btn btn-primary pd-deal" href={product.affiliate_url || "#"} target="_blank" rel="noopener noreferrer sponsored">
+              <a className="btn btn-primary pd-deal" href={product.affiliate_url ? `/go/${product.id}` : "#"} target="_blank" rel="noopener noreferrer sponsored">
                 {shopCta()} <I.external />
               </a>
               <div className="row2">

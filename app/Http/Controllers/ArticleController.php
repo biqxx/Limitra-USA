@@ -2,15 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\TracksVisitorContext;
 use App\Models\Article;
+use App\Models\ArticleView;
 use App\Models\Product;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class ArticleController extends Controller
 {
-    public function show(string $slug)
+    use TracksVisitorContext;
+
+    public function show(Request $request, string $slug)
     {
         $article = Article::where('slug', $slug)->firstOrFail();
+
+        ArticleView::create([
+            'article_id' => $article->id,
+            'source_page' => $this->pathFromReferer($request->headers->get('referer')),
+            'device' => $this->detectDevice($request->userAgent()),
+        ]);
 
         $productIds = collect($article->body ?? [])
             ->where('type', 'products')

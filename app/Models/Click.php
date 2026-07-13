@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Click extends Model
 {
-    protected $fillable = ['product_id', 'source_page', 'device'];
+    protected $fillable = ['product_id', 'source_page', 'device', 'sub_id'];
 
     public function product()
     {

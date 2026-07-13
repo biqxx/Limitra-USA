@@ -25,7 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         // Routes that return JSON (either api/* or admin upload endpoints)
         $isJsonEndpoint = fn (Request $r) =>
-            $r->is('api/*') || $r->is('admin/*/upload') || $r->is('admin/*/bulk-import') || $r->is('newsletter/*');
+            $r->is('api/*') || $r->is('admin/*/upload') || $r->is('admin/*/bulk-import') || $r->is('newsletter/*') || $r->is('videos/*/track-view');
 
         $exceptions->shouldRenderJsonWhen($isJsonEndpoint);
 
