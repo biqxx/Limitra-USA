@@ -11,8 +11,8 @@ class GeminiProvider implements AiProvider
     /** Ordered fallback chain tried on 503 / overload responses. */
     private const FALLBACK_MODELS = [
         'gemini-3.5-flash',
-        'gemini-3.1-flash',
-        'gemini-3.1-flash-lite',
+        // 'gemini-3.1-flash',
+        'gemini-3.5-flash-lite',
     ];
 
     private function modelUrl(string $model, string $method, string $key): string
