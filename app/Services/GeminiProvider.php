@@ -26,14 +26,14 @@ class GeminiProvider implements AiProvider
 
         $res = Http::withHeaders(['content-type' => 'application/json'])
             ->timeout(30)
-            ->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $key, $body);
+            ->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=' . $key, $body);
 
         $data = $res->json();
         if (!$res->successful()) {
             throw new RuntimeException('Gemini error: ' . ($data['error']['message'] ?? 'unknown'));
         }
 
-        // Thinking models (e.g. gemini-2.0-flash) return multiple parts — the first
+        // Thinking models (e.g. gemini-3.5-flash) return multiple parts — the first
         // may be a "thought" with no text. Iterate all parts to find the actual reply.
         $parts = $data['candidates'][0]['content']['parts'] ?? [];
         $text  = '';
@@ -57,7 +57,7 @@ class GeminiProvider implements AiProvider
         if (!$key) throw new RuntimeException('GEMINI_API_KEY not set');
 
         $client   = new Client();
-        $url      = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=' . $key . '&alt=sse';
+        $url      = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?key=' . $key . '&alt=sse';
         $response = $client->post($url, [
             'headers' => ['content-type' => 'application/json'],
             'json'    => [
