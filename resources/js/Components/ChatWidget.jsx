@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import I from './Icons';
 
 const CHAT_STORAGE = "limitra.chat.history.v1";
+const LAST_ACTIVITY_STORAGE = "limitra.chat.lastActivity.v1";
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
 // Strip any incomplete <product:... tag at the tail (happens mid-stream before > arrives)
 function safeContent(text) {
@@ -116,10 +118,18 @@ function ChatPanel({ onClose, catalog }) {
     setHistory([...next, { role: "assistant", content: "" }]);
     setLoading(true);
     try {
-      // Strip empty/incomplete messages (can appear if a previous stream was interrupted)
-      // and truncate very long ones so validation never rejects them.
+      // Read the previous activity timestamp BEFORE overwriting it — the cap below compares
+      // "now" against the last message before this send, not against itself.
+      const lastActivityAt = Number(localStorage.getItem(LAST_ACTIVITY_STORAGE)) || null;
+      const cap = (lastActivityAt && Date.now() - lastActivityAt > TWO_HOURS_MS) ? 5 : 15;
+      localStorage.setItem(LAST_ACTIVITY_STORAGE, String(Date.now()));
+
+      // Strip empty/incomplete messages (can appear if a previous stream was interrupted),
+      // cap how much history is sent to the AI, and truncate very long messages so
+      // validation never rejects them.
       const payload = next
         .filter((m) => m.content && m.content.trim())
+        .slice(-cap)
         .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
       const res = await fetch('/api/chat', {
@@ -169,7 +179,11 @@ function ChatPanel({ onClose, catalog }) {
     }
   };
 
-  const clearChat = () => { setHistory([]); localStorage.removeItem(CHAT_STORAGE); };
+  const clearChat = () => {
+    setHistory([]);
+    localStorage.removeItem(CHAT_STORAGE);
+    localStorage.removeItem(LAST_ACTIVITY_STORAGE);
+  };
 
   return (
     <div className="chat-panel">

@@ -39,7 +39,7 @@ class GeminiProvider implements AiProvider
         }
     }
 
-    public function chat(string $system, array $messages, int $maxTokens = 1024, bool $thinking = false): string
+    public function chat(string $system, array $messages, int $maxTokens = 1024, bool $thinking = false, ?array $responseSchema = null): string
     {
         $key = config('services.gemini.key');
         if (!$key) throw new RuntimeException('GEMINI_API_KEY not set');
@@ -53,6 +53,12 @@ class GeminiProvider implements AiProvider
         // Disable thinking for simple/fast calls (e.g. intent classification)
         if (!$thinking) {
             $body['generationConfig']['thinkingConfig'] = ['thinkingBudget' => 0];
+        }
+
+        // Force valid JSON output (e.g. for the scanning-phase classifier call) instead of
+        // relying on regex-scraping possibly-fenced free text out of the response.
+        if ($responseSchema !== null) {
+            $body['generationConfig']['responseMimeType'] = 'application/json';
         }
 
         $models    = self::INTENT_FALLBACK_MODELS;

@@ -17,7 +17,7 @@ class ChatController extends Controller
         set_time_limit(120);
 
         $request->validate([
-            'messages'           => 'required|array|min:1|max:20',
+            'messages'           => 'required|array|min:1|max:15',
             'messages.*.role'    => 'required|in:user,assistant',
             'messages.*.content' => 'present|string|max:10000',
         ]);
@@ -26,6 +26,9 @@ class ChatController extends Controller
             ->filter(fn ($m) => filled($m['content'] ?? ''))
             ->values()
             ->toArray();
+
+        // Defensive net regardless of what the client sends — this is a public, rate-limited endpoint.
+        $messages = array_slice($messages, -15);
 
         if (empty($messages)) {
             Log::warning('[Chat] Request rejected — no messages after filtering empty content');
@@ -42,20 +45,44 @@ class ChatController extends Controller
             'provider'      => get_class($provider),
         ]);
 
-        // Step 1: Intent detection
-        Log::info('[Chat] Step 1 — detecting intent');
-        $intent = $this->detectIntent($provider, $messages);
-        Log::info('[Chat] Intent result', [
-            'needs_products' => $intent['needs_products'],
-            'search'         => $intent['search'],
+        // Step 1: Scanning — intent, safety, and (if no product search is needed) the reply itself
+        Log::info('[Chat] Step 1 — scanning');
+        $scan = $this->scanIntent($provider, $messages);
+        Log::info('[Chat] Scan result', [
+            'needs_products' => $scan['needs_products'],
+            'safe'           => $scan['safe'],
+            'failed'         => $scan['failed'],
         ]);
 
-        // Step 2: Product search
-        $catalog = '';
-        if ($intent['needs_products'] && ! empty($intent['search'])) {
-            Log::info('[Chat] Step 2 — searching products', ['search' => $intent['search']]);
-            $catalog = $this->searchProducts($intent['search']);
-            $productCount = $catalog ? substr_count($catalog, "\n") + 1 : 0;
+        $useDirectReply = !$scan['needs_products'] && !$scan['failed'] && filled($scan['direct_reply']);
+
+        if ($useDirectReply) {
+            Log::info('[Chat] Step 2 — skipped (scanning phase answered directly)');
+
+            return response()->stream(function () use ($scan) {
+                while (ob_get_level() > 0) ob_end_flush();
+                echo 'data: ' . json_encode(['text' => $scan['direct_reply']]) . "\n\n";
+                flush();
+                echo "data: [DONE]\n\n";
+                flush();
+            }, 200, [
+                'Content-Type'      => 'text/event-stream',
+                'Cache-Control'     => 'no-cache, no-store',
+                'X-Accel-Buffering' => 'no',
+                'Connection'        => 'keep-alive',
+            ]);
+        }
+
+        // Step 2: Product search (also runs — with an empty catalog — if scanning failed
+        // entirely or found no search terms, degrading to the existing no-match fallback)
+        $catalog  = '';
+        $tokenMap = [];
+        if ($scan['needs_products'] && ! empty($scan['search'])) {
+            Log::info('[Chat] Step 2 — searching products', ['search' => $scan['search']]);
+            $result       = $this->searchProducts($scan['search']);
+            $catalog      = $result['catalog'];
+            $tokenMap     = $result['map'];
+            $productCount = count($tokenMap);
             Log::info('[Chat] Product search complete', ['products_found' => $productCount]);
         } else {
             Log::info('[Chat] Step 2 — skipped (no product search needed)');
@@ -65,18 +92,45 @@ class ChatController extends Controller
 
         Log::info('[Chat] Step 3 — starting stream');
 
-        return response()->stream(function () use ($provider, $system, $messages) {
+        return response()->stream(function () use ($provider, $system, $messages, $tokenMap) {
             while (ob_get_level() > 0) ob_end_flush();
 
-            try {
-                $provider->stream(
-                    $system,
-                    $messages,
-                    function (string $chunk) {
-                        echo 'data: ' . json_encode(['text' => $chunk]) . "\n\n";
-                        flush();
+            // Buffers a possible partial "<product:..." tag across chunk boundaries, then
+            // substitutes the short token the AI used (e.g. "p1") for the real product ID
+            // before the chunk reaches the browser — see substituteProductTokens().
+            $tagBuffer = '';
+            $flushChunk = function (string $text) use (&$tagBuffer, $tokenMap) {
+                $tagBuffer .= $text;
+
+                $lastLt = strrpos($tagBuffer, '<');
+                if ($lastLt !== false) {
+                    $tail = substr($tagBuffer, $lastLt);
+                    if (strpos($tail, '>') === false && preg_match('/^<[a-z0-9_:-]*$/i', $tail) && strlen($tail) <= 40) {
+                        $safe      = substr($tagBuffer, 0, $lastLt);
+                        $tagBuffer = $tail;
+                    } else {
+                        $safe      = $tagBuffer;
+                        $tagBuffer = '';
                     }
-                );
+                } else {
+                    $safe      = $tagBuffer;
+                    $tagBuffer = '';
+                }
+
+                if ($safe !== '') {
+                    echo 'data: ' . json_encode(['text' => $this->substituteProductTokens($safe, $tokenMap)]) . "\n\n";
+                    flush();
+                }
+            };
+
+            try {
+                $provider->stream($system, $messages, $flushChunk);
+
+                if ($tagBuffer !== '') {
+                    echo 'data: ' . json_encode(['text' => $this->substituteProductTokens($tagBuffer, $tokenMap)]) . "\n\n";
+                    flush();
+                }
+
                 Log::info('[Chat] Stream completed successfully');
             } catch (\Throwable $e) {
                 Log::error('[Chat] Stream failed', [
@@ -97,64 +151,40 @@ class ChatController extends Controller
         ]);
     }
 
-    // ── Intent detection ──────────────────────────────────────────────────────
+    // ── Scanning phase ────────────────────────────────────────────────────────
 
-    private function detectIntent(AiProvider $provider, array $messages): array
+    /**
+     * Classifies intent/safety and, when no product search is needed, composes the
+     * entire customer-facing reply itself — letting the app skip the execution call
+     * for that common case. Returns:
+     *   needs_products: bool, search: array|null, safe: bool, direct_reply: string|null, failed: bool
+     */
+    private function scanIntent(AiProvider $provider, array $messages): array
     {
-        $system = <<<SYS
-You are a JSON-only classifier for a shopping assistant. Analyze the conversation and decide if products need to be looked up.
-
-CRITICAL: Reply with RAW JSON only — no markdown, no code fences (```), no explanation, no extra text whatsoever.
-
-If yes, build a "search" object using any combination of these fields (set unused fields to null):
-
-- "text"        : searches both name AND description (OR) — use for general product type searches e.g. "handbag"
-- "name"        : searches product name only — use when text is null and you want name-specific search
-- "description" : searches product description only — use when text is null and you want description-specific search
-- "brand"       : partial match on brand name e.g. "armani", "nike"
-- "price"       : MUST use EXACTLY this format: {"op": "lt|lte|gt|gte|eq|between", "value": NUMBER}
-                  "under $100" → {"op": "lte", "value": 100}
-                  "less than $50" → {"op": "lt", "value": 50}
-                  "over $200" → {"op": "gt", "value": 200}
-                  "between $50 and $200" → {"op": "between", "value": [50, 200]}
-                  DO NOT use keys like "max", "min", "under", "above" — only "op" and "value" are valid.
-
-All non-null filters are combined with AND.
-Common examples:
-  General search → {"text": "beach bag", "brand": null, "name": null, "description": null, "price": null}
-  Brand + type  → {"text": "handbag", "brand": "gucci", "name": null, "description": null, "price": null}
-  Budget range  → {"text": "swimwear", "brand": null, "name": null, "description": null, "price": {"op": "lte", "value": 150}}
-  Gift under $100 → {"text": "gift", "brand": null, "name": null, "description": null, "price": {"op": "lte", "value": 100}}
-  Name only     → {"text": null, "brand": null, "name": "linen blazer", "description": null, "price": null}
-  Brand budget  → {"text": null, "brand": "armani", "name": null, "description": "hand bag", "price": {"op": "lt", "value": 200}}
-
-Reply ONLY with raw valid JSON (no code fences):
-{"needs_products": true, "search": {"text": "...", "name": null, "description": null, "brand": null, "price": null}}
-or:
-{"needs_products": false, "search": null}
-SYS;
+        $default = ['needs_products' => false, 'search' => null, 'safe' => true, 'direct_reply' => null, 'failed' => false];
 
         try {
-            $raw = $provider->chat($system, $messages, 200, false);
-            Log::debug('[Chat] Intent raw response', ['raw' => $raw]);
+            $system = $this->resolvePlaceholders(require resource_path('prompts/elo-scanning-prompt.php'));
+            // Passing [] (rather than null) just turns on Gemini's JSON response mode —
+            // its contents aren't used as an actual schema yet, see GeminiProvider::chat().
+            $raw    = $provider->chat($system, $messages, 700, false, []);
+            Log::debug('[Chat] Scan raw response', ['raw' => $raw]);
 
-            // Strip markdown code fences the model may wrap around the JSON
+            // Structured JSON mode should already return clean JSON — this fallback only
+            // covers a provider/model that ignores the mode and wraps it in prose/fences.
             $cleaned = preg_replace('/^```(?:json)?\s*/i', '', trim($raw));
             $cleaned = preg_replace('/\s*```$/', '', $cleaned);
 
-            preg_match('/\{.*\}/s', $cleaned, $match);
-            $json = $match[0] ?? null;
-
-            if (! $json) {
-                Log::warning('[Chat] Intent — no JSON found in response', ['raw' => $raw]);
-                return ['needs_products' => false, 'search' => null];
-            }
-
-            $data = json_decode($json, true);
+            $data = json_decode($cleaned, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
-                Log::warning('[Chat] Intent — JSON parse failed', ['json' => $json, 'error' => json_last_error_msg()]);
-                return ['needs_products' => false, 'search' => null];
+                preg_match('/\{.*\}/s', $cleaned, $match);
+                $data = isset($match[0]) ? json_decode($match[0], true) : null;
+            }
+
+            if (! is_array($data)) {
+                Log::warning('[Chat] Scan — JSON parse failed', ['raw' => $raw]);
+                return $default;
             }
 
             // Normalize price: model sometimes returns {min, max} instead of {op, value}
@@ -162,16 +192,24 @@ SYS;
                 $data['search']['price'] = $this->normalizePriceFilter($data['search']['price']);
             }
 
+            $safe = (bool) ($data['safe'] ?? true);
+            if (!$safe) {
+                Log::warning('[Chat] Scan flagged message as unsafe', ['direct_reply' => $data['direct_reply'] ?? null]);
+            }
+
             return [
                 'needs_products' => (bool) ($data['needs_products'] ?? false),
                 'search'         => $data['search'] ?? null,
+                'safe'           => $safe,
+                'direct_reply'   => $data['direct_reply'] ?? null,
+                'failed'         => false,
             ];
         } catch (\Throwable $e) {
-            Log::error('[Chat] Intent detection failed', [
+            Log::error('[Chat] Scanning failed', [
                 'error' => $e->getMessage(),
                 'file'  => $e->getFile() . ':' . $e->getLine(),
             ]);
-            return ['needs_products' => false, 'search' => null];
+            return ['needs_products' => false, 'search' => null, 'safe' => true, 'direct_reply' => null, 'failed' => true];
         }
     }
 
@@ -215,10 +253,13 @@ SYS;
         });
     }
 
-    /** Searches product name only */
+    /** Searches product name, falling back to description so a name-only search doesn't miss matches */
     private function filterByName(Builder $query, string $term): void
     {
-        $query->where('name', 'like', "%{$term}%");
+        $query->where(function ($q) use ($term) {
+            $q->where('name', 'like', "%{$term}%")
+              ->orWhere('description', 'like', "%{$term}%");
+        });
     }
 
     /** Searches product description only */
@@ -253,7 +294,8 @@ SYS;
 
     // ── Product search orchestrator ───────────────────────────────────────────
 
-    private function searchProducts(array $search): string
+    /** @return array{catalog: string, map: array<string,string>} */
+    private function searchProducts(array $search): array
     {
         $query = Product::with(['category', 'subcategory']);
 
@@ -290,18 +332,26 @@ SYS;
                 'sql'   => $query->toSql(),
                 'file'  => $e->getFile() . ':' . $e->getLine(),
             ]);
-            return '';
+            return ['catalog' => '', 'map' => []];
         }
 
         Log::info('[Chat] Query returned ' . $products->count() . ' product(s)', [
             'ids' => $products->pluck('id')->all(),
         ]);
 
-        if ($products->isEmpty()) return '';
+        if ($products->isEmpty()) return ['catalog' => '', 'map' => []];
 
-        return $products->map(function ($p) {
+        // Give the AI a short token instead of the real UUID — LLMs reliably reproduce
+        // "p1" inline but frequently mistype long random UUIDs, breaking the <product:ID>
+        // tag. The real ID is substituted back in server-side before the reply is sent
+        // (see substituteProductTokens()); the frontend never needs to see the token.
+        $map = [];
+        $catalog = $products->map(function ($p, $i) use (&$map) {
+            $token = 'p' . ($i + 1);
+            $map[$token] = (string) $p->id;
+
             $parts = [
-                'ID: '       . $p->id,
+                'ID: '       . $token,
                 'Name: '     . $p->name,
                 'Brand: '    . ($p->brand ?? 'Limitra Select'),
                 'Category: ' . implode(' › ', array_filter([$p->category?->name, $p->subcategory?->name])),
@@ -310,6 +360,33 @@ SYS;
             if ($p->description) $parts[] = 'Description: ' . $p->description;
             return implode(' | ', $parts);
         })->implode("\n");
+
+        return ['catalog' => $catalog, 'map' => $map];
+    }
+
+    /** Replaces AI-typed <product:TOKEN> short tokens with the real product ID. */
+    private function substituteProductTokens(string $text, array $tokenMap): string
+    {
+        if (empty($tokenMap)) return $text;
+
+        return preg_replace_callback('/<product:([a-z0-9_-]+)>/i', function ($m) use ($tokenMap) {
+            return isset($tokenMap[$m[1]]) ? '<product:' . $tokenMap[$m[1]] . '>' : $m[0];
+        }, $text);
+    }
+
+    /** Resolves the {{...}} placeholders shared by the scanning and execution prompts. */
+    private function resolvePlaceholders(string $text): string
+    {
+        $settings = SiteSetting::allAsMap();
+
+        $replacements = [
+            '{{approved_support_contact}}'     => $settings['chat_support_contact']       ?? 'our support team via the Contact page',
+            '{{approved_incident_contact}}'    => $settings['chat_incident_contact']      ?? 'our support team via the Contact page',
+            '{{approved_partnership_contact}}' => $settings['chat_partnership_contact']   ?? 'our partnerships team via the Contact page',
+            '{{limitra_product_page_url}}'     => $settings['chat_product_page_base_url'] ?? url('/product'),
+        ];
+
+        return strtr($text, $replacements);
     }
 
     // ── System prompt ─────────────────────────────────────────────────────────
@@ -328,9 +405,9 @@ in this reply. Do not withhold a recommendation to ask a clarifying question ins
 brief refining question afterward only if it genuinely helps, but never in place of
 recommending from this list.
 When you mention a product, embed its tag immediately after naming it so a clickable card appears in the chat:
-  <product:PRODUCT_ID>
-Use the exact ID from the "ID:" field. Example:
-  "I'd start with the Limitra Linen Blazer <product:limitra-linen-blazer> — it anchors any look effortlessly."
+  <product:TOKEN>
+Use the exact token from the "ID:" field (e.g. "p1") — do not invent or modify it. Example:
+  "I'd start with the Limitra Linen Blazer <product:p1> — it anchors any look effortlessly."
 Always embed 2–4 product tags per reply. Never skip the tag when recommending a product.
 SECTION;
         } else {
@@ -340,14 +417,6 @@ SECTION;
         static $base = null;
         $base ??= require resource_path('prompts/elo-system-prompt.php');
 
-        $settings = SiteSetting::allAsMap();
-        $replacements = [
-            '{{approved_support_contact}}'     => $settings['chat_support_contact']       ?? 'our support team via the Contact page',
-            '{{approved_incident_contact}}'    => $settings['chat_incident_contact']      ?? 'our support team via the Contact page',
-            '{{approved_partnership_contact}}' => $settings['chat_partnership_contact']   ?? 'our partnerships team via the Contact page',
-            '{{limitra_product_page_url}}'     => $settings['chat_product_page_base_url'] ?? url('/product'),
-        ];
-
-        return strtr($base, $replacements) . "\n\n" . $productSection;
+        return $this->resolvePlaceholders($base) . "\n\n" . $productSection;
     }
 }
