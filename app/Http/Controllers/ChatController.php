@@ -13,6 +13,8 @@ class ChatController extends Controller
 {
     public function message(Request $request)
     {
+        set_time_limit(120);
+
         $request->validate([
             'messages'           => 'required|array|min:1|max:20',
             'messages.*.role'    => 'required|in:user,assistant',

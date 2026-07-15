@@ -39,7 +39,8 @@ class GeminiProvider implements AiProvider
         $lastError = 'unknown';
         foreach (self::FALLBACK_MODELS as $i => $model) {
             $res  = Http::withHeaders(['content-type' => 'application/json'])
-                ->timeout(30)
+                ->connectTimeout(10)
+                ->timeout(20)
                 ->post($this->modelUrl($model, 'generateContent', $key), $body);
             $data = $res->json();
 
@@ -94,7 +95,9 @@ class GeminiProvider implements AiProvider
                 'contents'           => $this->toContents($messages),
                 'generationConfig'   => ['maxOutputTokens' => $maxTokens],
             ],
-            'stream'  => true,
+            'stream'          => true,
+            'connect_timeout' => 10,
+            'timeout'         => 25,
         ];
 
         $response  = null;
