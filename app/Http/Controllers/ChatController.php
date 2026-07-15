@@ -322,6 +322,11 @@ RELEVANT PRODUCTS:
 {$catalog}
 
 SHOWING PRODUCTS TO THE CUSTOMER:
+These products were already searched and matched for this customer's request — this is not a
+case of missing information. You MUST recommend at least one of them by name, with its tag,
+in this reply. Do not withhold a recommendation to ask a clarifying question instead; ask a
+brief refining question afterward only if it genuinely helps, but never in place of
+recommending from this list.
 When you mention a product, embed its tag immediately after naming it so a clickable card appears in the chat:
   <product:PRODUCT_ID>
 Use the exact ID from the "ID:" field. Example:
