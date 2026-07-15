@@ -37,6 +37,10 @@ class SiteSettingSeeder extends Seeder
             ['key' => 'newsletter_modal_image',     'value' => 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=800&q=80'],
             ['key' => 'newsletter_popup_delay_ms',  'value' => '3000'],
             ['key' => 'newsletter_popup_cooldown_ms', 'value' => '86400000'],
+            ['key' => 'chat_support_contact',       'value' => 'support@limitrausa.example — REPLACE BEFORE LAUNCH'],
+            ['key' => 'chat_incident_contact',      'value' => 'incidents@limitrausa.example — REPLACE BEFORE LAUNCH'],
+            ['key' => 'chat_partnership_contact',   'value' => 'partnerships@limitrausa.example — REPLACE BEFORE LAUNCH'],
+            ['key' => 'chat_product_page_base_url', 'value' => '/product'],
         ];
 
         SiteSetting::upsert($settings, ['key'], ['value']);

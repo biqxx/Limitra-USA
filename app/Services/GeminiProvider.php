@@ -89,7 +89,7 @@ class GeminiProvider implements AiProvider
         $body = json_encode([
             'system_instruction' => ['parts' => [['text' => $system]]],
             'contents'           => $this->toContents($messages),
-            'generationConfig'   => ['maxOutputTokens' => $maxTokens],
+            'generationConfig'   => ['maxOutputTokens' => $maxTokens, 'temperature' => 0.3],
         ]);
 
         $lastError = 'unknown';

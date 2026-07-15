@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Models\SiteSetting;
 use App\Services\AiProvider;
 use App\Services\AiProviderFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -331,17 +332,17 @@ SECTION;
             $productSection = 'No specific products matched this query. Give helpful general shopping advice and ask a clarifying question to better understand what the customer needs. Do not embed any product tags.';
         }
 
-        return <<<PROMPT
-You are Elo — a warm, knowledgeable personal shopping guide for Limitra USA, a curated product discovery platform covering fashion, beauty, home, lifestyle, and travel.
+        static $base = null;
+        $base ??= require resource_path('prompts/elo-system-prompt.php');
 
-{$productSection}
+        $settings = SiteSetting::allAsMap();
+        $replacements = [
+            '{{approved_support_contact}}'     => $settings['chat_support_contact']       ?? 'our support team via the Contact page',
+            '{{approved_incident_contact}}'    => $settings['chat_incident_contact']      ?? 'our support team via the Contact page',
+            '{{approved_partnership_contact}}' => $settings['chat_partnership_contact']   ?? 'our partnerships team via the Contact page',
+            '{{limitra_product_page_url}}'     => $settings['chat_product_page_base_url'] ?? url('/product'),
+        ];
 
-RULES:
-- Keep replies short: 2–4 sentences. No long paragraphs.
-- End each reply with one brief follow-up question to refine the recommendation.
-- Never mention prices — users discover them when they click through.
-- Tone: warm, editorial, like a trusted style friend.
-- If the user asks something unrelated to shopping, gently steer back.
-PROMPT;
+        return strtr($base, $replacements) . "\n\n" . $productSection;
     }
 }
