@@ -8,15 +8,35 @@ use RuntimeException;
 
 class GeminiProvider implements AiProvider
 {
-    /** Ordered fallback chain tried on 503 / overload responses. */
-    private const FALLBACK_MODELS = [
+    /** Ordered fallback chain for the intent-classification call. */
+    private const INTENT_FALLBACK_MODELS = [
         'gemini-3.5-flash',
         'gemini-3.1-flash-lite',
+        'gemini-2.5-flash-lite',
+        'gemini-2.0-flash-lite-001',
     ];
+
+    /** Ordered fallback chain for the customer-facing streamed reply. */
+    private const REPLY_FALLBACK_MODELS = [
+        'gemini-3.5-flash',
+        'gemini-3.1-flash-lite',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+    ];
+
+    /** Statuses worth retrying the next model for — overload/rate-limit, not real errors. */
+    private const RETRYABLE_STATUSES = [503, 429];
 
     private function modelUrl(string $model, string $method, string $key): string
     {
         return "https://generativelanguage.googleapis.com/v1beta/models/{$model}:{$method}?key={$key}";
+    }
+
+    private function logFallback(string $model, ?string $next, string $error): void
+    {
+        if ($next) {
+            Log::warning("[Gemini] {$model} unavailable, falling back to {$next}", ['error' => $error]);
+        }
     }
 
     public function chat(string $system, array $messages, int $maxTokens = 1024, bool $thinking = false): string
@@ -35,31 +55,41 @@ class GeminiProvider implements AiProvider
             $body['generationConfig']['thinkingConfig'] = ['thinkingBudget' => 0];
         }
 
+        $models    = self::INTENT_FALLBACK_MODELS;
         $lastError = 'unknown';
-        foreach (self::FALLBACK_MODELS as $i => $model) {
-            $res  = Http::withHeaders(['content-type' => 'application/json'])
-                ->connectTimeout(10)
-                ->timeout(20)
-                ->post($this->modelUrl($model, 'generateContent', $key), $body);
-            $data = $res->json();
+        $data      = null;
 
-            if ($res->successful()) {
-                break; // success — proceed with $data
+        foreach ($models as $i => $model) {
+            $next = $models[$i + 1] ?? null;
+
+            try {
+                $res = Http::withHeaders(['content-type' => 'application/json'])
+                    ->connectTimeout(10)
+                    ->timeout(20)
+                    ->post($this->modelUrl($model, 'generateContent', $key), $body);
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                // Timeout / connection failure — not an HTTP status, but still retryable.
+                $lastError = $e->getMessage();
+                $this->logFallback($model, $next, $lastError);
+                continue;
             }
 
-            $lastError = $data['error']['message'] ?? 'unknown';
+            if ($res->successful()) {
+                $data = $res->json();
+                break;
+            }
 
-            // Only retry on overload / unavailable; surface all other errors immediately.
-            if ($res->status() !== 503) {
+            $lastError = $res->json('error.message') ?? 'unknown';
+
+            // Only retry on overload/rate-limit; surface all other errors immediately.
+            if (!in_array($res->status(), self::RETRYABLE_STATUSES, true)) {
                 throw new RuntimeException('Gemini error: ' . $lastError);
             }
 
-            if ($next = self::FALLBACK_MODELS[$i + 1] ?? null) {
-                Log::warning("[Gemini] {$model} unavailable (503), falling back to {$next}", ['error' => $lastError]);
-            }
+            $this->logFallback($model, $next, $lastError);
         }
 
-        if (!$res->successful()) {
+        if ($data === null) {
             throw new RuntimeException('Gemini error: ' . $lastError);
         }
 
@@ -92,10 +122,12 @@ class GeminiProvider implements AiProvider
             'generationConfig'   => ['maxOutputTokens' => $maxTokens, 'temperature' => 0.3],
         ]);
 
+        $models    = self::REPLY_FALLBACK_MODELS;
         $lastError = 'unknown';
         $success   = false;
 
-        foreach (self::FALLBACK_MODELS as $i => $model) {
+        foreach ($models as $i => $model) {
+            $next       = $models[$i + 1] ?? null;
             $url        = $this->modelUrl($model, 'streamGenerateContent', $key) . '&alt=sse';
             $buffer     = '';
             $rawBody    = '';
@@ -149,14 +181,14 @@ class GeminiProvider implements AiProvider
             $decoded   = json_decode($rawBody, true);
             $lastError = $curlError ?: ($decoded['error']['message'] ?? "HTTP {$statusCode}");
 
-            // Only retry on overload / unavailable; surface all other errors immediately.
-            if ($statusCode !== 503) {
+            // A connection-level failure (timeout, refused, etc.) has no HTTP status at
+            // all — treat it as retryable the same as overload/rate-limit statuses.
+            $isConnectionFailure = $statusCode === 0 && $curlError !== '';
+            if (!$isConnectionFailure && !in_array($statusCode, self::RETRYABLE_STATUSES, true)) {
                 throw new RuntimeException('Gemini stream error: ' . $lastError);
             }
 
-            if ($next = self::FALLBACK_MODELS[$i + 1] ?? null) {
-                Log::warning("[Gemini] {$model} unavailable (503), falling back to {$next}", ['error' => $lastError]);
-            }
+            $this->logFallback($model, $next, $lastError);
         }
 
         if (!$success) {
