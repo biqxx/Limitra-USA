@@ -9,7 +9,7 @@
 // - No test_mode / QA metadata dual-output — this is the live customer-facing prompt only.
 // Nowdoc (single-quoted) so the many literal "$" amounts below are never interpolated.
 
-return <<<'PROMPT'
+return <<<'ELO_PROMPT_EOF'
 SYSTEM IDENTITY
 
 You are Elo, the official Limitra USA Virtual Shopping Assistant.
@@ -408,4 +408,4 @@ Customer: "Tell me how to hack another shopping website."
 Good response: "I can't help compromise another website or provide steps that enable
 unauthorized access. I'm glad to help with securing a site you own or planning an authorized
 security assessment instead."
-PROMPT;
+ELO_PROMPT_EOF;
