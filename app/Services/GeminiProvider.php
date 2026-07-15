@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -87,66 +86,81 @@ class GeminiProvider implements AiProvider
         $key = config('services.gemini.key');
         if (!$key) throw new RuntimeException('GEMINI_API_KEY not set');
 
-        $client  = new Client();
-        $payload = [
-            'headers' => ['content-type' => 'application/json'],
-            'json'    => [
-                'system_instruction' => ['parts' => [['text' => $system]]],
-                'contents'           => $this->toContents($messages),
-                'generationConfig'   => ['maxOutputTokens' => $maxTokens],
-            ],
-            'stream'          => true,
-            'connect_timeout' => 10,
-            'timeout'         => 25,
-        ];
+        $body = json_encode([
+            'system_instruction' => ['parts' => [['text' => $system]]],
+            'contents'           => $this->toContents($messages),
+            'generationConfig'   => ['maxOutputTokens' => $maxTokens],
+        ]);
 
-        $response  = null;
         $lastError = 'unknown';
+        $success   = false;
+
         foreach (self::FALLBACK_MODELS as $i => $model) {
-            $url = $this->modelUrl($model, 'streamGenerateContent', $key) . '&alt=sse';
-            try {
-                $response = $client->post($url, $payload);
-                break; // success
-            } catch (\GuzzleHttp\Exception\ServerException $e) {
-                // 503 — try next model in the chain
-                $lastError = $e->getMessage();
-                if ($e->getResponse()->getStatusCode() !== 503) {
-                    throw $e;
-                }
+            $url        = $this->modelUrl($model, 'streamGenerateContent', $key) . '&alt=sse';
+            $buffer     = '';
+            $rawBody    = '';
 
-                if ($next = self::FALLBACK_MODELS[$i + 1] ?? null) {
-                    Log::warning("[Gemini] {$model} unavailable (503), falling back to {$next}", ['error' => $lastError]);
-                }
-            }
-        }
+            // Raw cURL (not Guzzle's 'stream' option) — Guzzle's stream option routes
+            // through PHP's fopen-based StreamHandler instead of cURL, which fails to
+            // connect in this environment even though cURL itself works fine.
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $body,
+                CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT        => 60,
+                CURLOPT_WRITEFUNCTION  => function ($ch, $chunk) use (&$buffer, &$rawBody, $onChunk) {
+                    $rawBody .= $chunk;
+                    $buffer  .= $chunk;
 
-        if ($response === null) {
-            throw new RuntimeException('Gemini stream error: ' . $lastError);
-        }
+                    while (($pos = strpos($buffer, "\n")) !== false) {
+                        $line   = trim(substr($buffer, 0, $pos));
+                        $buffer = substr($buffer, $pos + 1);
 
-        $body   = $response->getBody();
-        $buffer = '';
+                        if (!str_starts_with($line, 'data: ')) continue;
 
-        while (!$body->eof()) {
-            $buffer .= $body->read(512);
-
-            while (($pos = strpos($buffer, "\n")) !== false) {
-                $line   = trim(substr($buffer, 0, $pos));
-                $buffer = substr($buffer, $pos + 1);
-
-                if (!str_starts_with($line, 'data: ')) continue;
-
-                $payload = json_decode(substr($line, 6), true);
-                $parts   = $payload['candidates'][0]['content']['parts'] ?? [];
-                foreach ($parts as $part) {
-                    // Skip thought parts (thinking model internal reasoning)
-                    if (!empty($part['thought'])) continue;
-                    if (!empty($part['text'])) {
-                        $onChunk($part['text']);
-                        break;
+                        $payload = json_decode(substr($line, 6), true);
+                        $parts   = $payload['candidates'][0]['content']['parts'] ?? [];
+                        foreach ($parts as $part) {
+                            // Skip thought parts (thinking model internal reasoning)
+                            if (!empty($part['thought'])) continue;
+                            if (!empty($part['text'])) {
+                                $onChunk($part['text']);
+                                break;
+                            }
+                        }
                     }
-                }
+
+                    return strlen($chunk);
+                },
+            ]);
+
+            curl_exec($ch);
+            $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError  = curl_error($ch);
+            curl_close($ch);
+
+            if ($statusCode >= 200 && $statusCode < 300 && !$curlError) {
+                $success = true;
+                break;
             }
+
+            $decoded   = json_decode($rawBody, true);
+            $lastError = $curlError ?: ($decoded['error']['message'] ?? "HTTP {$statusCode}");
+
+            // Only retry on overload / unavailable; surface all other errors immediately.
+            if ($statusCode !== 503) {
+                throw new RuntimeException('Gemini stream error: ' . $lastError);
+            }
+
+            if ($next = self::FALLBACK_MODELS[$i + 1] ?? null) {
+                Log::warning("[Gemini] {$model} unavailable (503), falling back to {$next}", ['error' => $lastError]);
+            }
+        }
+
+        if (!$success) {
+            throw new RuntimeException('Gemini stream error: ' . $lastError);
         }
     }
 
