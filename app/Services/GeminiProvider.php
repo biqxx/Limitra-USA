@@ -4,6 +4,7 @@ namespace App\Services;
 
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class GeminiProvider implements AiProvider
@@ -11,8 +12,7 @@ class GeminiProvider implements AiProvider
     /** Ordered fallback chain tried on 503 / overload responses. */
     private const FALLBACK_MODELS = [
         'gemini-3.5-flash',
-        // 'gemini-3.1-flash',
-        'gemini-3.5-flash-lite',
+        'gemini-3.1-flash-lite',
     ];
 
     private function modelUrl(string $model, string $method, string $key): string
@@ -37,7 +37,7 @@ class GeminiProvider implements AiProvider
         }
 
         $lastError = 'unknown';
-        foreach (self::FALLBACK_MODELS as $model) {
+        foreach (self::FALLBACK_MODELS as $i => $model) {
             $res  = Http::withHeaders(['content-type' => 'application/json'])
                 ->timeout(30)
                 ->post($this->modelUrl($model, 'generateContent', $key), $body);
@@ -52,6 +52,10 @@ class GeminiProvider implements AiProvider
             // Only retry on overload / unavailable; surface all other errors immediately.
             if ($res->status() !== 503) {
                 throw new RuntimeException('Gemini error: ' . $lastError);
+            }
+
+            if ($next = self::FALLBACK_MODELS[$i + 1] ?? null) {
+                Log::warning("[Gemini] {$model} unavailable (503), falling back to {$next}", ['error' => $lastError]);
             }
         }
 
@@ -95,7 +99,7 @@ class GeminiProvider implements AiProvider
 
         $response  = null;
         $lastError = 'unknown';
-        foreach (self::FALLBACK_MODELS as $model) {
+        foreach (self::FALLBACK_MODELS as $i => $model) {
             $url = $this->modelUrl($model, 'streamGenerateContent', $key) . '&alt=sse';
             try {
                 $response = $client->post($url, $payload);
@@ -105,6 +109,10 @@ class GeminiProvider implements AiProvider
                 $lastError = $e->getMessage();
                 if ($e->getResponse()->getStatusCode() !== 503) {
                     throw $e;
+                }
+
+                if ($next = self::FALLBACK_MODELS[$i + 1] ?? null) {
+                    Log::warning("[Gemini] {$model} unavailable (503), falling back to {$next}", ['error' => $lastError]);
                 }
             }
         }
