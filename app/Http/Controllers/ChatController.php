@@ -244,34 +244,65 @@ class ChatController extends Controller
 
     // ── Search filters ────────────────────────────────────────────────────────
 
-    /** Searches name OR description — the common case for product type lookups */
-    private function filterByText(Builder $query, string $term): void
+    /**
+     * Normalizes a search field into a list of terms. Accepts a JSON array (preferred —
+     * what the scanning prompt is instructed to send for related/synonym keywords), or
+     * falls back to splitting a single string on "|"/"," in case the AI sends one anyway.
+     */
+    private function normalizeTerms(mixed $value): array
     {
-        $query->where(function ($q) use ($term) {
-            $q->where('name', 'like', "%{$term}%")
-              ->orWhere('description', 'like', "%{$term}%");
+        $parts = is_array($value) ? $value : preg_split('/[|,]/', (string) $value);
+
+        return array_values(array_filter(array_map(
+            fn ($t) => trim((string) $t),
+            $parts
+        ), fn ($t) => $t !== ''));
+    }
+
+    /** Searches name OR description for ANY of the given terms — the common case for product type lookups */
+    private function filterByText(Builder $query, array $terms): void
+    {
+        $query->where(function ($q) use ($terms) {
+            foreach ($terms as $term) {
+                $q->orWhere(function ($qq) use ($term) {
+                    $qq->where('name', 'like', "%{$term}%")
+                       ->orWhere('description', 'like', "%{$term}%");
+                });
+            }
         });
     }
 
-    /** Searches product name, falling back to description so a name-only search doesn't miss matches */
-    private function filterByName(Builder $query, string $term): void
+    /** Searches product name for ANY of the given terms, falling back to description so a name-only search doesn't miss matches */
+    private function filterByName(Builder $query, array $terms): void
     {
-        $query->where(function ($q) use ($term) {
-            $q->where('name', 'like', "%{$term}%")
-              ->orWhere('description', 'like', "%{$term}%");
+        $query->where(function ($q) use ($terms) {
+            foreach ($terms as $term) {
+                $q->orWhere(function ($qq) use ($term) {
+                    $qq->where('name', 'like', "%{$term}%")
+                       ->orWhere('description', 'like', "%{$term}%");
+                });
+            }
         });
     }
 
-    /** Searches product description only */
-    private function filterByDescription(Builder $query, string $term): void
+    /** Searches product description for ANY of the given terms */
+    private function filterByDescription(Builder $query, array $terms): void
     {
-        $query->where('description', 'like', "%{$term}%");
+        $query->where(function ($q) use ($terms) {
+            foreach ($terms as $term) {
+                $q->orWhere('description', 'like', "%{$term}%");
+            }
+        });
     }
 
-    /** Searches brand — partial match so "armani" matches "Giorgio Armani" */
-    private function filterByBrand(Builder $query, string $term): void
+    /** Searches brand for ANY of the given terms — partial match so "armani" matches "Giorgio Armani" */
+    private function filterByBrand(Builder $query, array $terms): void
     {
-        $query->where('brand', 'like', "%{$term}%");
+        $query->where(function ($q) use ($terms) {
+            foreach ($terms as $term) {
+                $q->orWhere('brand', 'like', "%{$term}%");
+            }
+        });
     }
 
     /**
@@ -300,23 +331,27 @@ class ChatController extends Controller
         $query = Product::with(['category', 'subcategory']);
 
         // Text searches name OR description; if text is set, individual name/description are skipped
-        if (filled($search['text'] ?? null)) {
-            Log::debug('[Chat] Filter: text', ['term' => $search['text']]);
-            $this->filterByText($query, $search['text']);
+        $textTerms = $this->normalizeTerms($search['text'] ?? null);
+        if (!empty($textTerms)) {
+            Log::debug('[Chat] Filter: text', ['terms' => $textTerms]);
+            $this->filterByText($query, $textTerms);
         } else {
-            if (filled($search['name'] ?? null)) {
-                Log::debug('[Chat] Filter: name', ['term' => $search['name']]);
-                $this->filterByName($query, $search['name']);
+            $nameTerms = $this->normalizeTerms($search['name'] ?? null);
+            if (!empty($nameTerms)) {
+                Log::debug('[Chat] Filter: name', ['terms' => $nameTerms]);
+                $this->filterByName($query, $nameTerms);
             }
-            if (filled($search['description'] ?? null)) {
-                Log::debug('[Chat] Filter: description', ['term' => $search['description']]);
-                $this->filterByDescription($query, $search['description']);
+            $descriptionTerms = $this->normalizeTerms($search['description'] ?? null);
+            if (!empty($descriptionTerms)) {
+                Log::debug('[Chat] Filter: description', ['terms' => $descriptionTerms]);
+                $this->filterByDescription($query, $descriptionTerms);
             }
         }
 
-        if (filled($search['brand'] ?? null)) {
-            Log::debug('[Chat] Filter: brand', ['term' => $search['brand']]);
-            $this->filterByBrand($query, $search['brand']);
+        $brandTerms = $this->normalizeTerms($search['brand'] ?? null);
+        if (!empty($brandTerms)) {
+            Log::debug('[Chat] Filter: brand', ['terms' => $brandTerms]);
+            $this->filterByBrand($query, $brandTerms);
         }
 
         if (! empty($search['price']['op'])) {

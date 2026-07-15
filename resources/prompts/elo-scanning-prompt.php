@@ -47,11 +47,22 @@ fields (set unused fields to null):
                   "over $200" → {"op": "gt", "value": 200}
                   "between $50 and $200" → {"op": "between", "value": [50, 200]}
                   DO NOT use keys like "max", "min", "under", "above" — only "op" and "value" are valid.
+
+"text", "name", "description", and "brand" each accept EITHER a single string OR a JSON array
+of related/synonym keywords — use an array whenever several distinct words could plausibly
+match what the customer wants, so a broader net gets cast in one search instead of missing
+close variants. Every keyword in the array is OR'd together (a product matches if ANY of them
+match). Example: a request for beauty items could use
+  "text": ["beauty", "aesthetics", "makeup", "beauty accessories", "skincare"]
+rather than a single narrow term. Keep the list to a handful of genuinely related terms, not
+an unrelated grab-bag.
+
 All non-null filters are combined with AND. When "needs_products" is false, "search" must be
 null.
 
 Common search examples:
   General search → {"text": "beach bag", "brand": null, "name": null, "description": null, "price": null}
+  Related-keyword search → {"text": ["beauty", "aesthetics", "makeup", "beauty accessories"], "brand": null, "name": null, "description": null, "price": null}
   Brand + type  → {"text": "handbag", "brand": "gucci", "name": null, "description": null, "price": null}
   Budget range  → {"text": "swimwear", "brand": null, "name": null, "description": null, "price": {"op": "lte", "value": 150}}
   Gift under $100 → {"text": "gift", "brand": null, "name": null, "description": null, "price": {"op": "lte", "value": 100}}
