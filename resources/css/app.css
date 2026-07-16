@@ -1368,6 +1368,11 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .auth-error { color: #c0392b; font-size: 13px; margin-top: -4px; text-align: left; }
 .auth-remember { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .auth-remember input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
+/* Both login/register forms stay mounted, stacked in the same grid cell, so the container
+   sizes to the taller one and the modal never grows/shrinks when the tab switches. */
+.auth-forms { display: grid; width: 100%; }
+.auth-forms .auth-form { grid-area: 1 / 1; visibility: hidden; pointer-events: none; }
+.auth-forms .auth-form.active { visibility: visible; pointer-events: auto; }
 
 /* mini dropdown (New Arrivals / Trending / Guides) — compact, not full-width */
 .mini-mega {
