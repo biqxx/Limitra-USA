@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import I from './Icons';
+import { copyToClipboard } from '../lib/clipboard';
 
 // Deal CTA label, shown regardless of retailer.
 export function shopCta() {
@@ -101,7 +102,8 @@ export function ShareRow({ product }) {
   const enc = encodeURIComponent;
 
   const copyUrl = async (msg = 'Link copied to clipboard') => {
-    try { await navigator.clipboard.writeText(url); } catch (e) {}
+    const ok = await copyToClipboard(url);
+    if (!ok) return;
     setToast(msg);
     setTimeout(() => setToast(null), 1800);
   };

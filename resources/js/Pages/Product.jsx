@@ -4,6 +4,7 @@ import Layout from '../Components/Layout';
 import Seo from '../Components/Seo';
 import I from '../Components/Icons';
 import { ProductRow, QuickView, SavedDrawer, ShareRow, shopCta } from '../Components/ProductCard';
+import { copyToClipboard } from '../lib/clipboard';
 
 function StyleTheLookPreview({ product, looks, productsMap }) {
   if (!looks?.length) return null;
@@ -94,7 +95,8 @@ export default function Product() {
   const specs = detail?.specs || [];
   const copyLink = async () => {
     const url = `${window.location.origin}/product/${product.slug || product.id}`;
-    try { await navigator.clipboard.writeText(url); } catch (e) {}
+    const ok = await copyToClipboard(url);
+    if (!ok) return;
     setCopied(true); setTimeout(() => setCopied(false), 1600);
   };
 
