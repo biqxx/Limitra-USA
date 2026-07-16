@@ -125,7 +125,17 @@ class GeminiProvider implements AiProvider
         $body = json_encode([
             'system_instruction' => ['parts' => [['text' => $system]]],
             'contents'           => $this->toContents($messages),
-            'generationConfig'   => ['maxOutputTokens' => $maxTokens, 'temperature' => 0.3],
+            // thinkingBudget: 0 — without this, thinking-capable models in the fallback
+            // chain (gemini-3.5-flash, gemini-3.1-flash-lite, gemini-2.5-flash) silently
+            // spend part of maxOutputTokens on invisible reasoning tokens before the
+            // visible reply even starts, which was cutting replies short once the budget
+            // ran out. The execution prompt follows a fixed template — it doesn't need
+            // extended reasoning, so the full budget should go to the visible reply.
+            'generationConfig'   => [
+                'maxOutputTokens' => $maxTokens,
+                'temperature'     => 0.3,
+                'thinkingConfig'  => ['thinkingBudget' => 0],
+            ],
         ]);
 
         $models    = self::REPLY_FALLBACK_MODELS;
@@ -133,10 +143,11 @@ class GeminiProvider implements AiProvider
         $success   = false;
 
         foreach ($models as $i => $model) {
-            $next       = $models[$i + 1] ?? null;
-            $url        = $this->modelUrl($model, 'streamGenerateContent', $key) . '&alt=sse';
-            $buffer     = '';
-            $rawBody    = '';
+            $next         = $models[$i + 1] ?? null;
+            $url          = $this->modelUrl($model, 'streamGenerateContent', $key) . '&alt=sse';
+            $buffer       = '';
+            $rawBody      = '';
+            $finishReason = null;
 
             // Raw cURL (not Guzzle's 'stream' option) — Guzzle's stream option routes
             // through PHP's fopen-based StreamHandler instead of cURL, which fails to
@@ -148,7 +159,7 @@ class GeminiProvider implements AiProvider
                 CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
                 CURLOPT_CONNECTTIMEOUT => 10,
                 CURLOPT_TIMEOUT        => 60,
-                CURLOPT_WRITEFUNCTION  => function ($ch, $chunk) use (&$buffer, &$rawBody, $onChunk) {
+                CURLOPT_WRITEFUNCTION  => function ($ch, $chunk) use (&$buffer, &$rawBody, &$finishReason, $onChunk) {
                     $rawBody .= $chunk;
                     $buffer  .= $chunk;
 
@@ -159,7 +170,12 @@ class GeminiProvider implements AiProvider
                         if (!str_starts_with($line, 'data: ')) continue;
 
                         $payload = json_decode(substr($line, 6), true);
-                        $parts   = $payload['candidates'][0]['content']['parts'] ?? [];
+
+                        if (!empty($payload['candidates'][0]['finishReason'])) {
+                            $finishReason = $payload['candidates'][0]['finishReason'];
+                        }
+
+                        $parts = $payload['candidates'][0]['content']['parts'] ?? [];
                         foreach ($parts as $part) {
                             // Skip thought parts (thinking model internal reasoning)
                             if (!empty($part['thought'])) continue;
@@ -181,6 +197,14 @@ class GeminiProvider implements AiProvider
 
             if ($statusCode >= 200 && $statusCode < 300 && !$curlError) {
                 $success = true;
+
+                // "STOP" means the model finished naturally; anything else (most notably
+                // "MAX_TOKENS") means the reply was cut off — surface it so truncated
+                // replies are diagnosable instead of silently looking like a short answer.
+                if ($finishReason && $finishReason !== 'STOP') {
+                    Log::warning("[Gemini] {$model} stream ended with finishReason={$finishReason} (reply may be truncated)");
+                }
+
                 break;
             }
 

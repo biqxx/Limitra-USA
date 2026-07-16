@@ -58,6 +58,7 @@ class ChatController extends Controller
 
         if ($useDirectReply) {
             Log::info('[Chat] Step 2 — skipped (scanning phase answered directly)');
+            Log::info('[Chat] Reply sent', ['length' => mb_strlen($scan['direct_reply']), 'text' => $scan['direct_reply']]);
 
             return response()->stream(function () use ($scan) {
                 while (ob_get_level() > 0) ob_end_flush();
@@ -99,7 +100,8 @@ class ChatController extends Controller
             // substitutes the short token the AI used (e.g. "p1") for the real product ID
             // before the chunk reaches the browser — see substituteProductTokens().
             $tagBuffer = '';
-            $flushChunk = function (string $text) use (&$tagBuffer, $tokenMap) {
+            $fullReply = '';
+            $flushChunk = function (string $text) use (&$tagBuffer, &$fullReply, $tokenMap) {
                 $tagBuffer .= $text;
 
                 $lastLt = strrpos($tagBuffer, '<');
@@ -118,7 +120,9 @@ class ChatController extends Controller
                 }
 
                 if ($safe !== '') {
-                    echo 'data: ' . json_encode(['text' => $this->substituteProductTokens($safe, $tokenMap)]) . "\n\n";
+                    $safe = $this->substituteProductTokens($safe, $tokenMap);
+                    $fullReply .= $safe;
+                    echo 'data: ' . json_encode(['text' => $safe]) . "\n\n";
                     flush();
                 }
             };
@@ -127,15 +131,19 @@ class ChatController extends Controller
                 $provider->stream($system, $messages, $flushChunk);
 
                 if ($tagBuffer !== '') {
-                    echo 'data: ' . json_encode(['text' => $this->substituteProductTokens($tagBuffer, $tokenMap)]) . "\n\n";
+                    $tail = $this->substituteProductTokens($tagBuffer, $tokenMap);
+                    $fullReply .= $tail;
+                    echo 'data: ' . json_encode(['text' => $tail]) . "\n\n";
                     flush();
                 }
 
                 Log::info('[Chat] Stream completed successfully');
+                Log::info('[Chat] Reply sent', ['length' => mb_strlen($fullReply), 'text' => $fullReply]);
             } catch (\Throwable $e) {
                 Log::error('[Chat] Stream failed', [
-                    'error' => $e->getMessage(),
-                    'file'  => $e->getFile() . ':' . $e->getLine(),
+                    'error'          => $e->getMessage(),
+                    'file'           => $e->getFile() . ':' . $e->getLine(),
+                    'partial_reply'  => $fullReply,
                 ]);
                 echo 'data: ' . json_encode(['error' => 'Assistant unavailable. Please try again.']) . "\n\n";
                 flush();
