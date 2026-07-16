@@ -16,23 +16,50 @@ class ChatController extends Controller
     {
         set_time_limit(120);
 
-        $request->validate([
-            'messages'           => 'required|array|min:1|max:15',
-            'messages.*.role'    => 'required|in:user,assistant',
-            'messages.*.content' => 'present|string|max:10000',
-        ]);
+        $user = $request->user();
 
-        $messages = collect($request->input('messages'))
-            ->filter(fn ($m) => filled($m['content'] ?? ''))
-            ->values()
-            ->toArray();
+        if ($user) {
+            // Authenticated: the server is the source of truth for conversation history —
+            // the client only sends the single new message it just typed.
+            $request->validate([
+                'messages'           => 'required|array|min:1|max:1',
+                'messages.0.role'    => 'required|in:user',
+                'messages.0.content' => 'required|string|max:10000',
+            ]);
 
-        // Defensive net regardless of what the client sends — this is a public, rate-limited endpoint.
-        $messages = array_slice($messages, -15);
+            $incoming = trim($request->input('messages.0.content'));
+            if ($incoming === '') {
+                Log::warning('[Chat] Request rejected — empty message content');
+                return response()->json(['error' => 'No messages provided.'], 422);
+            }
 
-        if (empty($messages)) {
-            Log::warning('[Chat] Request rejected — no messages after filtering empty content');
-            return response()->json(['error' => 'No messages provided.'], 422);
+            $user->chatMessages()->create(['role' => 'user', 'content' => $incoming]);
+
+            $messages = $user->chatMessages()
+                ->latest('created_at')->latest('id')
+                ->limit(15)->get()
+                ->reverse()->values()
+                ->map(fn ($m) => ['role' => $m->role, 'content' => $m->content])
+                ->toArray();
+        } else {
+            $request->validate([
+                'messages'           => 'required|array|min:1|max:15',
+                'messages.*.role'    => 'required|in:user,assistant',
+                'messages.*.content' => 'present|string|max:10000',
+            ]);
+
+            $messages = collect($request->input('messages'))
+                ->filter(fn ($m) => filled($m['content'] ?? ''))
+                ->values()
+                ->toArray();
+
+            // Defensive net regardless of what the client sends — this is a public, rate-limited endpoint.
+            $messages = array_slice($messages, -15);
+
+            if (empty($messages)) {
+                Log::warning('[Chat] Request rejected — no messages after filtering empty content');
+                return response()->json(['error' => 'No messages provided.'], 422);
+            }
         }
 
         $provider = AiProviderFactory::make();
@@ -60,12 +87,16 @@ class ChatController extends Controller
             Log::info('[Chat] Step 2 — skipped (scanning phase answered directly)');
             Log::info('[Chat] Reply sent', ['length' => mb_strlen($scan['direct_reply']), 'text' => $scan['direct_reply']]);
 
-            return response()->stream(function () use ($scan) {
+            return response()->stream(function () use ($scan, $user) {
                 while (ob_get_level() > 0) ob_end_flush();
                 echo 'data: ' . json_encode(['text' => $scan['direct_reply']]) . "\n\n";
                 flush();
                 echo "data: [DONE]\n\n";
                 flush();
+
+                if ($user) {
+                    $user->chatMessages()->create(['role' => 'assistant', 'content' => $scan['direct_reply']]);
+                }
             }, 200, [
                 'Content-Type'      => 'text/event-stream',
                 'Cache-Control'     => 'no-cache, no-store',
@@ -93,7 +124,7 @@ class ChatController extends Controller
 
         Log::info('[Chat] Step 3 — starting stream');
 
-        return response()->stream(function () use ($provider, $system, $messages, $tokenMap) {
+        return response()->stream(function () use ($provider, $system, $messages, $tokenMap, $user) {
             while (ob_get_level() > 0) ob_end_flush();
 
             // Buffers a possible partial "<product:..." tag across chunk boundaries, then
@@ -139,6 +170,10 @@ class ChatController extends Controller
 
                 Log::info('[Chat] Stream completed successfully');
                 Log::info('[Chat] Reply sent', ['length' => mb_strlen($fullReply), 'text' => $fullReply]);
+
+                if ($user && $fullReply !== '') {
+                    $user->chatMessages()->create(['role' => 'assistant', 'content' => $fullReply]);
+                }
             } catch (\Throwable $e) {
                 Log::error('[Chat] Stream failed', [
                     'error'          => $e->getMessage(),
@@ -157,6 +192,45 @@ class ChatController extends Controller
             'X-Accel-Buffering' => 'no',
             'Connection'        => 'keep-alive',
         ]);
+    }
+
+    /** Returns the authenticated user's full persisted chat thread, oldest first. */
+    public function history(Request $request)
+    {
+        return response()->json([
+            'messages' => $request->user()->chatMessages()
+                ->get(['role', 'content'])
+                ->map(fn ($m) => ['role' => $m->role, 'content' => $m->content]),
+        ]);
+    }
+
+    /**
+     * One-shot guest→account chat seeding. Only seeds if the account has no prior
+     * messages yet — a repeat login from any guest session must never duplicate history.
+     */
+    public function merge(Request $request)
+    {
+        $data = $request->validate([
+            'messages'           => 'array',
+            'messages.*.role'    => 'required_with:messages|in:user,assistant',
+            'messages.*.content' => 'required_with:messages|string|max:10000',
+        ]);
+
+        $user = $request->user();
+
+        if ($user->chatMessages()->exists()) {
+            return response()->json([
+                'merged'   => false,
+                'messages' => $user->chatMessages()->get(['role', 'content']),
+            ]);
+        }
+
+        foreach (($data['messages'] ?? []) as $m) {
+            if (trim($m['content'] ?? '') === '') continue;
+            $user->chatMessages()->create(['role' => $m['role'], 'content' => $m['content']]);
+        }
+
+        return response()->json(['merged' => true]);
     }
 
     // ── Scanning phase ────────────────────────────────────────────────────────

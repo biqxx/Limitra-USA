@@ -4,6 +4,7 @@ import Layout from '../Components/Layout';
 import Seo from '../Components/Seo';
 import I from '../Components/Icons';
 import { SavedDrawer } from '../Components/ProductCard';
+import useSaved from '../hooks/useSaved';
 
 function StlProd({ p, hero }) {
   if (!p) return <div className={"stl-prod" + (hero ? " hero" : "")}></div>;
@@ -131,16 +132,10 @@ export default function StyleLook() {
   const { props } = usePage();
   const { look, products, otherLooks } = props;
 
-  const [saved, setSaved] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("limitra.saved.v1") || "[]")); }
-    catch (e) { return new Set(); }
-  });
+  const { saved, toggle } = useSaved();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
-  useEffect(() => { localStorage.setItem("limitra.saved.v1", JSON.stringify([...saved])); }, [saved]);
-
-  const toggle = (id) => setSaved((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const productsMap = {};
   (products || []).forEach((p) => { productsMap[p.id] = p; if (p.slug) productsMap[p.slug] = p; });

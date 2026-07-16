@@ -36,6 +36,12 @@ class Product extends Model
         return $this->hasOne(ProductDetail::class, 'product_id');
     }
 
+    public function favoritedBy()
+    {
+        return $this->belongsToMany(User::class, 'favorite_products', 'product_id', 'user_id')
+            ->withTimestamps();
+    }
+
     public function toFrontend(): array
     {
         return [

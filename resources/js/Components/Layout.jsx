@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Link, usePage } from '@inertiajs/react';
+import { Link, usePage, router } from '@inertiajs/react';
 import I from './Icons';
 import ChatWidget from './ChatWidget';
+import AuthModal from './AuthModal';
 
 const NAV_MINI_DATA = {
   newArrivals: {
@@ -371,16 +372,20 @@ export function Header({ savedCount, onOpenSaved }) {
   const cats = props.categories || [];
   const catalog = props.catalog || [];
   const ls = props.layoutSettings || {};
+  const user = props.auth?.user || null;
   const popupDelayMs   = Number(ls.newsletter_popup_delay_ms   ?? 3000);
   const popupCooldownMs = Number(ls.newsletter_popup_cooldown_ms ?? 86400000);
   const modalImage = ls.newsletter_modal_image || '';
 
   const [searchOpen,   setSearchOpen]   = useState(false);
   const [signupOpen,   setSignupOpen]   = useState(false);
+  const [authOpen,     setAuthOpen]     = useState(false);
   const [mobileOpen,   setMobileOpen]   = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(null);
   const [openNav, setOpenNav] = useState(null);
   const navRef = useRef(null);
+
+  const logout = () => router.post('/logout');
 
   useEffect(() => {
     if (hasSignedUp() || shownWithinCooldown(popupCooldownMs)) return;
@@ -500,7 +505,14 @@ export function Header({ savedCount, onOpenSaved }) {
             <I.heart />
             {savedCount > 0 && <span className="count">{savedCount}</span>}
           </button>
-          <button className="tool-link desktop-only" onClick={() => setSignupOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit", color: "inherit" }}>Sign in</button>
+          {user ? (
+            <span className="desktop-only" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span className="tool-link" style={{ cursor: "default" }}>{user.name}</span>
+              <button className="tool-link" onClick={logout} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit", color: "inherit" }}>Log out</button>
+            </span>
+          ) : (
+            <button className="tool-link desktop-only" onClick={() => setAuthOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit", color: "inherit" }}>Sign in</button>
+          )}
           <button className="icon-btn mobile-menu-btn" onClick={() => setMobileOpen(true)} aria-label="Open menu">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
@@ -547,7 +559,11 @@ export function Header({ savedCount, onOpenSaved }) {
             </div>
             <div className="mobile-nav-foot">
               <Link href="/page/contact">Contact</Link>
-              <button onClick={() => { setMobileOpen(false); setSignupOpen(true); }}>Sign in</button>
+              {user ? (
+                <button onClick={() => { setMobileOpen(false); logout(); }}>Log out ({user.name})</button>
+              ) : (
+                <button onClick={() => { setMobileOpen(false); setAuthOpen(true); }}>Sign in</button>
+              )}
             </div>
           </div>
         </div>
@@ -555,6 +571,7 @@ export function Header({ savedCount, onOpenSaved }) {
 
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} catalog={catalog} categories={cats} />
       <SignupModal open={signupOpen} onClose={() => setSignupOpen(false)} modalImage={modalImage} />
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </header>
   );
 }

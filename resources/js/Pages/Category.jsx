@@ -3,6 +3,7 @@ import { usePage, Link } from '@inertiajs/react';
 import Layout from '../Components/Layout';
 import Seo from '../Components/Seo';
 import { ProductCard, QuickView, SavedDrawer } from '../Components/ProductCard';
+import useSaved from '../hooks/useSaved';
 import { Newsletter } from '../Components/Layout';
 
 const SORTS = [
@@ -27,17 +28,11 @@ export default function Category() {
 
   const [activeSub, setActiveSub] = useState("All");
   const [sort, setSort] = useState("featured");
-  const [saved, setSaved] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("limitra.saved.v1") || "[]")); }
-    catch (e) { return new Set(); }
-  });
+  const { saved, toggle } = useSaved();
   const [quick, setQuick] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
-  useEffect(() => { localStorage.setItem("limitra.saved.v1", JSON.stringify([...saved])); }, [saved]);
-
-  const toggle = (id) => setSaved((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const allProducts = products || [];
   const subs = category?.subcategories || [];

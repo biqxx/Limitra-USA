@@ -5,6 +5,7 @@ import Seo from '../Components/Seo';
 import I from '../Components/Icons';
 import { ProductRow, QuickView, SavedDrawer, ShareRow, shopCta } from '../Components/ProductCard';
 import { copyToClipboard } from '../lib/clipboard';
+import useSaved from '../hooks/useSaved';
 
 function StyleTheLookPreview({ product, looks, productsMap }) {
   if (!looks?.length) return null;
@@ -71,20 +72,13 @@ export default function Product() {
   const { props } = usePage();
   const { product, relatedProducts, looks, detail } = props;
 
-  const [saved, setSaved] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("limitra.saved.v1") || "[]")); }
-    catch (e) { return new Set(); }
-  });
+  const { saved, toggle } = useSaved();
   const [quick, setQuick] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
-  useEffect(() => { localStorage.setItem("limitra.saved.v1", JSON.stringify([...saved])); }, [saved]);
 
-  const toggle = (pid) => setSaved((prev) => {
-    const n = new Set(prev); n.has(pid) ? n.delete(pid) : n.add(pid); return n;
-  });
   const isSaved = saved.has(product?.id);
 
   const allProducts = relatedProducts || [];

@@ -4,9 +4,11 @@ use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\ArticleController;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CollectionController;
+use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\GuidesController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
@@ -37,6 +39,22 @@ Route::post('/videos/{id}/track-view', [VideoViewController::class, 'store'])->n
 Route::get('/admin/login', [AdminAuthController::class, 'showLogin'])->name('admin.login');
 Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.post')->middleware('throttle:6,1');
 Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
+
+// Customer auth (public)
+Route::post('/register', [AuthController::class, 'register'])->name('register')->middleware('throttle:10,1');
+Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:10,1');
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+// Favorites + chat history (auth required) — nested under /api/* so bootstrap/app.php's
+// existing shouldRenderJsonWhen($r->is('api/*')) predicate covers them for clean JSON
+// error responses instead of an HTML redirect to the POST-only /login route.
+Route::middleware('auth')->prefix('api')->group(function () {
+    Route::get('/favorites', [FavoriteController::class, 'index'])->name('favorites.index');
+    Route::post('/favorites/toggle', [FavoriteController::class, 'toggle'])->name('favorites.toggle');
+    Route::post('/favorites/merge', [FavoriteController::class, 'merge'])->name('favorites.merge');
+    Route::get('/chat/history', [ChatController::class, 'history'])->name('chat.history');
+    Route::post('/chat/merge', [ChatController::class, 'merge'])->name('chat.merge');
+});
 
 // Admin (protected)
 Route::middleware('admin')->group(function () {

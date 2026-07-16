@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { usePage } from '@inertiajs/react';
 import I from './Icons';
 
 const CHAT_STORAGE = "limitra.chat.history.v1";
@@ -147,7 +148,12 @@ function getCsrfToken() {
 }
 
 function ChatPanel({ onClose, catalog }) {
+  const { props } = usePage();
+  const user = props.auth?.user || null;
+  const mergedRef = useRef(false);
+
   const [history, setHistory] = useState(() => {
+    if (user) return [];
     try { return JSON.parse(localStorage.getItem(CHAT_STORAGE) || "[]"); } catch (e) { return []; }
   });
   const [input, setInput] = useState("");
@@ -163,8 +169,34 @@ function ChatPanel({ onClose, catalog }) {
   }, [messages, loading]);
 
   useEffect(() => {
+    if (user) return;
     localStorage.setItem(CHAT_STORAGE, JSON.stringify(history));
-  }, [history]);
+  }, [history, user]);
+
+  // On login: seed any local guest history into the account (no-ops if it already has
+  // messages), then hydrate from the server-persisted thread.
+  useEffect(() => {
+    if (!user || mergedRef.current) return;
+    mergedRef.current = true;
+
+    const localHistory = (() => {
+      try { return JSON.parse(localStorage.getItem(CHAT_STORAGE) || "[]"); } catch (e) { return []; }
+    })();
+
+    fetch('/api/chat/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+      body: JSON.stringify({ messages: localHistory }),
+    })
+      .then(() => fetch('/api/chat/history'))
+      .then((r) => r.json())
+      .then((data) => {
+        setHistory(data.messages || []);
+        localStorage.removeItem(CHAT_STORAGE);
+        localStorage.removeItem(LAST_ACTIVITY_STORAGE);
+      })
+      .catch(() => {});
+  }, [user]);
 
   const send = async (text) => {
     const q = (text || input).trim();
@@ -190,10 +222,13 @@ function ChatPanel({ onClose, catalog }) {
         .slice(-cap)
         .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
+      // Authenticated: server sources prior context itself — only send the new message.
+      const body = user ? { messages: [{ role: 'user', content: q }] } : { messages: payload };
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
-        body: JSON.stringify({ messages: payload }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || d.error || 'Server error'); }
 

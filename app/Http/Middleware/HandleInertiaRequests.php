@@ -27,6 +27,14 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...$shared,
+            'auth' => [
+                'user' => $request->user() ? [
+                    'id'    => $request->user()->id,
+                    'name'  => $request->user()->name,
+                    'email' => $request->user()->email,
+                    'phone' => $request->user()->phone,
+                ] : null,
+            ],
             'categories' => fn () => \App\Models\Category::with('subcategories')->orderBy('sort_order')->get()->map(fn ($c) => [
                 'id' => $c->id,
                 'name' => $c->name,

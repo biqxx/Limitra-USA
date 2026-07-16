@@ -7,32 +7,19 @@ import { TrustStrip } from '../Components/Layout';
 import { ProductRow, CategoryGrid, QuickView, SavedDrawer, OccasionsSection } from '../Components/ProductCard';
 import { EditorialSection } from '../Components/EditorialSection';
 import { VideoSection } from '../Components/VideoSection';
-
-const SAVED_KEY = "limitra.saved.v1";
-function loadSaved() {
-  try { return new Set(JSON.parse(localStorage.getItem(SAVED_KEY) || "[]")); }
-  catch (e) { return new Set(); }
-}
+import useSaved from '../hooks/useSaved';
 
 export default function Home() {
   const { props } = usePage();
   const { categories, featuredProducts, resortProducts, occasions, articles, videos, settings = {}, catalogCount = 0 } = props;
 
-  const [saved, setSaved] = useState(loadSaved);
+  const { saved, toggle } = useSaved();
   const [quick, setQuick] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.palette = "riviera";
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(SAVED_KEY, JSON.stringify([...saved]));
-  }, [saved]);
-
-  const toggle = (id) => setSaved((prev) => {
-    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
-  });
 
   const savedProducts = [...(featuredProducts || []), ...(resortProducts || [])].filter((p, i, a) => saved.has(p.id) && a.findIndex(x => x.id === p.id) === i);
 

@@ -1361,6 +1361,14 @@ section { padding-block: clamp(48px, 6vw, 84px); }
   .ns-form-side { padding: 36px 24px; }
 }
 
+/* auth modal (sign in / create account) — reuses .ns-* classes above */
+.auth-tabs { display: flex; gap: 6px; width: 100%; margin-bottom: 18px; border-radius: 9px; background: var(--bg); padding: 4px; }
+.auth-tabs button { flex: 1; border: none; background: none; padding: 10px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: background .2s, color .2s; }
+.auth-tabs button.active { background: #fff; color: var(--brand); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.auth-error { color: #c0392b; font-size: 13px; margin-top: -4px; text-align: left; }
+.auth-remember { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.auth-remember input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
+
 /* mini dropdown (New Arrivals / Trending / Guides) — compact, not full-width */
 .mini-mega {
   min-width: 240px;
