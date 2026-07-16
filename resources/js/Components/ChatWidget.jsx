@@ -10,6 +10,54 @@ function safeContent(text) {
   return text.replace(/<product:[^>]*$/i, '');
 }
 
+// Renders "**bold**" segments within a line of plain text. An unmatched trailing "**"
+// (mid-stream, before its closing marker has arrived yet) is left as literal text — it
+// resolves itself once the rest of the pair streams in on a later re-render.
+function renderInline(text, keyPrefix) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((seg, i) => {
+    const m = seg.match(/^\*\*([^*]+)\*\*$/);
+    return m ? <strong key={`${keyPrefix}-b${i}`}>{m[1]}</strong> : seg;
+  });
+}
+
+// Renders a block of plain text: consecutive "* item" lines become a numbered list
+// (numbering is automatic — the AI is never expected to number them), everything else
+// becomes a paragraph. Each line/item also runs through renderInline() for "**bold**".
+function renderTextBlock(text, keyPrefix) {
+  const lines = text.split("\n").filter(Boolean);
+  const nodes = [];
+  let listItems = [];
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    nodes.push(
+      <ol key={`${keyPrefix}-l${nodes.length}`} style={{ margin: "0 0 5px", paddingLeft: 20 }}>
+        {listItems.map((item, j) => (
+          <li key={`${keyPrefix}-li${j}`}>{renderInline(item, `${keyPrefix}-li${j}`)}</li>
+        ))}
+      </ol>
+    );
+    listItems = [];
+  };
+
+  lines.forEach((line) => {
+    const listMatch = line.match(/^\*\s+(.*)/);
+    if (listMatch) {
+      listItems.push(listMatch[1]);
+      return;
+    }
+    flushList();
+    nodes.push(
+      <p key={`${keyPrefix}-p${nodes.length}`} style={{ margin: "0 0 5px" }}>
+        {renderInline(line, `${keyPrefix}-p${nodes.length}`)}
+      </p>
+    );
+  });
+  flushList();
+
+  return nodes;
+}
+
 function ChatProdCard({ p }) {
   return (
     <a href={`/product/${p.slug || p.id}`} className="chat-prod-card" target="_blank" rel="noopener">
@@ -59,9 +107,7 @@ function ChatMessage({ msg, catalog }) {
         {parts.map((part, i) => {
           if (i % 2 === 0) {
             // Text segment
-            return part.split("\n").filter(Boolean).map((line, j) => (
-              <p key={`t${i}-${j}`} style={{ margin: "0 0 5px" }}>{line}</p>
-            ));
+            return renderTextBlock(part, `t${i}`);
           }
           // Product ID — look it up in the catalog and render the card
           const product = catalog?.find((p) => p.id === part);
