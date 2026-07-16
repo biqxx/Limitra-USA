@@ -23,15 +23,24 @@ function renderInline(text, keyPrefix) {
 // Renders a block of plain text: consecutive "* item" lines become a numbered list
 // (numbering is automatic — the AI is never expected to number them), everything else
 // becomes a paragraph. Each line/item also runs through renderInline() for "**bold**".
-function renderTextBlock(text, keyPrefix) {
+//
+// listCounter is a { count } object shared across every renderTextBlock() call for the
+// same message — a product recommendation typically embeds a <product:ID> tag right
+// after each "* item" line, which splits the message into several separate text segments
+// (one per list line). Without a shared counter each segment's <ol> would restart at 1;
+// passing `start={listCounter.count + 1}` keeps the numbering continuous (1, 2, 3...)
+// across those separate <ol> elements.
+function renderTextBlock(text, keyPrefix, listCounter) {
   const lines = text.split("\n").filter(Boolean);
   const nodes = [];
   let listItems = [];
 
   const flushList = () => {
     if (listItems.length === 0) return;
+    const startAt = listCounter.count + 1;
+    listCounter.count += listItems.length;
     nodes.push(
-      <ol key={`${keyPrefix}-l${nodes.length}`} style={{ margin: "0 0 5px", paddingLeft: 20 }}>
+      <ol key={`${keyPrefix}-l${nodes.length}`} start={startAt} style={{ margin: "0 0 5px", paddingLeft: 20 }}>
         {listItems.map((item, j) => (
           <li key={`${keyPrefix}-li${j}`}>{renderInline(item, `${keyPrefix}-li${j}`)}</li>
         ))}
@@ -99,6 +108,9 @@ function ChatMessage({ msg, catalog }) {
 
   // Split on complete <product:id> tags; strip any incomplete one at the end (mid-stream)
   const parts = safeContent(msg.content).split(/<product:([a-z0-9_-]+)>/gi);
+  // Shared across all text segments in this message so list numbering stays continuous
+  // even though a <product:ID> tag splits one logical list into several text segments.
+  const listCounter = { count: 0 };
 
   return (
     <div className="chat-msg ai">
@@ -107,7 +119,7 @@ function ChatMessage({ msg, catalog }) {
         {parts.map((part, i) => {
           if (i % 2 === 0) {
             // Text segment
-            return renderTextBlock(part, `t${i}`);
+            return renderTextBlock(part, `t${i}`, listCounter);
           }
           // Product ID — look it up in the catalog and render the card
           const product = catalog?.find((p) => p.id === part);
