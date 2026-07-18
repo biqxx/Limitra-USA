@@ -84,7 +84,15 @@ export default function Collection() {
   const { props } = usePage();
   const { type, products, occasion, categories } = props;
 
-  const cfg = TYPES_CONFIG[type] || TYPES_CONFIG.new;
+  const base = TYPES_CONFIG[type] || TYPES_CONFIG.new;
+  const cfg = occasion ? {
+    ...base,
+    eyebrow: occasion.eyebrow || base.eyebrow,
+    title: occasion.title || base.title,
+    tagline: occasion.tagline || base.tagline,
+    heroImg: occasion.img || base.heroImg,
+    accent: occasion.accent || base.accent,
+  } : base;
 
   const [activeFilter, setActiveFilter] = useState("all");
   const [sort, setSort] = useState("featured");

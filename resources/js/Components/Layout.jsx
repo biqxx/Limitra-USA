@@ -636,6 +636,8 @@ export function Footer() {
     { key: 'pinterest', label: 'Pinterest', href: ls.social_pinterest_url, Icon: I.pinterest },
     { key: 'x', label: 'X', href: ls.social_x_url, Icon: I.x },
     { key: 'tiktok', label: 'TikTok', href: ls.social_tiktok_url, Icon: I.tiktok },
+    { key: 'linkedin', label: 'LinkedIn', href: ls.social_linkedin_url, Icon: I.linkedin },
+    { key: 'snapchat', label: 'Snapchat', href: ls.social_snapchat_url, Icon: I.snapchat },
   ].filter((s) => s.href);
 
   const cols = [

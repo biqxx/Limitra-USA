@@ -6,6 +6,7 @@ use App\Models\Article;
 use App\Models\Category;
 use App\Models\Click;
 use App\Models\Conversion;
+use App\Models\Guide;
 use App\Models\Look;
 use App\Models\Occasion;
 use App\Models\Product;
@@ -27,6 +28,7 @@ class BulkImportService
             'products' => $this->importProducts($items),
             'occasions' => $this->importOccasions($items),
             'articles' => $this->importArticles($items),
+            'guides' => $this->importGuides($items),
             'looks' => $this->importLooks($items),
             'videos' => $this->importVideos($items),
             'conversions' => $this->importConversions($items),
@@ -209,6 +211,51 @@ class BulkImportService
                             'read_time' => ($data['readTime'] ?? null) ?: '5 min',
                             'featured' => (bool) ($data['featured'] ?? false),
                             'body' => !empty($data['excerpt']) ? [['type' => 'lead', 'text' => $data['excerpt']]] : [],
+                        ]);
+                        $created++;
+                    }
+                } catch (\Throwable $e) {
+                    $errors[] = ['row' => $i, 'summary' => $summary, 'message' => $e->getMessage()];
+                }
+            }
+        });
+
+        return compact('created', 'updated', 'skipped', 'errors');
+    }
+
+    public function importGuides(array $items): array
+    {
+        $created = 0; $updated = 0; $skipped = 0; $errors = [];
+
+        DB::transaction(function () use ($items, &$created, &$updated, &$skipped, &$errors) {
+            foreach ($items as $i => $item) {
+                $action = $item['action'] ?? 'skip';
+                if ($action === 'skip') { $skipped++; continue; }
+                $data = $item['data'] ?? [];
+                $summary = $data['title'] ?? ('Row ' . ($i + 1));
+
+                try {
+                    if ($action === 'update' && !empty($item['id'])) {
+                        $guide = Guide::findOrFail($item['id']);
+                        $guide->update([
+                            'tag' => ($data['tag'] ?? null) ?: $guide->tag,
+                            'title' => ($data['title'] ?? null) ?: $guide->title,
+                            'excerpt' => $data['excerpt'] ?? $guide->excerpt,
+                            'img' => ($data['img'] ?? null) ?: $guide->img,
+                            'read_time' => ($data['readTime'] ?? null) ?: $guide->read_time,
+                            'featured' => (bool) ($data['featured'] ?? $guide->featured),
+                        ]);
+                        $summary = $guide->title;
+                        $updated++;
+                    } else {
+                        Guide::create([
+                            'slug' => ($data['slug'] ?? null) ?: Str::slug($data['title'] ?? Str::random(8)),
+                            'tag' => ($data['tag'] ?? null) ?: 'Fashion',
+                            'title' => $data['title'] ?? 'Untitled guide',
+                            'excerpt' => $data['excerpt'] ?? '',
+                            'img' => $data['img'] ?? null,
+                            'read_time' => ($data['readTime'] ?? null) ?: '5 min',
+                            'featured' => (bool) ($data['featured'] ?? false),
                         ]);
                         $created++;
                     }

@@ -25,6 +25,7 @@ class DatabaseSeeder extends Seeder
             LookSeeder::class,
             VideoSeeder::class,
             GuideSeeder::class,
+            StaticPageSeeder::class,
             SiteSettingSeeder::class,
         ]);
     }

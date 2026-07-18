@@ -1408,6 +1408,7 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 
 /* static pages */
 .static-body { max-width: 820px; margin: 0 auto; padding: clamp(36px, 5vw, 72px) 0 80px; }
+.static-hero-img { width: 100%; max-height: 360px; object-fit: cover; border-radius: 14px; margin-bottom: 28px; display: block; }
 .static-body h1 { font-family: var(--font-display,"Bodoni Moda"),serif; font-weight: 500; font-size: clamp(30px, 4vw, 46px); color: var(--brand); margin: 0 0 8px; }
 .static-body .lead { font-size: 17px; color: var(--muted); line-height: 1.65; margin: 0 0 36px; max-width: 60ch; }
 .static-body h2 { font-family: var(--font-display,"Bodoni Moda"),serif; font-weight: 500; font-size: 24px; color: var(--brand); margin: 44px 0 12px; }

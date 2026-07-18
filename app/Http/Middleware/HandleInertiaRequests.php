@@ -68,6 +68,8 @@ class HandleInertiaRequests extends Middleware
                 'social_pinterest_url',
                 'social_x_url',
                 'social_tiktok_url',
+                'social_linkedin_url',
+                'social_snapchat_url',
             ])->pluck('value', 'key')->toArray(),
         ];
     }

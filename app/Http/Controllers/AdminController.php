@@ -6,11 +6,13 @@ use App\Jobs\ProcessBulkImport;
 use App\Models\Article;
 use App\Models\BulkImportBatch;
 use App\Models\Category;
+use App\Models\Guide;
 use App\Models\Look;
 use App\Models\Occasion;
 use App\Models\Product;
 use App\Models\ProductDetail;
 use App\Models\SiteSetting;
+use App\Models\StaticPage;
 use App\Models\Subcategory;
 use App\Models\Video;
 use App\Services\AnalyticsService;
@@ -49,6 +51,8 @@ class AdminController extends Controller
             'categories' => Inertia::defer(fn () => $this->categoriesForAdmin(), 'catalog'),
             'occasions' => Inertia::defer(fn () => Occasion::orderBy('sort_order')->get(), 'content'),
             'articles' => Inertia::defer(fn () => Article::orderByDesc('id')->get(), 'content'),
+            'guides' => Inertia::defer(fn () => Guide::orderByDesc('featured')->orderBy('sort_order')->get(), 'content'),
+            'staticPages' => Inertia::defer(fn () => StaticPage::orderBy('title')->get(), 'content'),
             'looks' => Inertia::defer(fn () => Look::orderByDesc('id')->get(), 'content'),
             'videos' => Inertia::defer(fn () => Video::orderBy('sort_order')->get(), 'content'),
             'bulkImports' => Inertia::defer(fn () => BulkImportBatch::orderByDesc('id')->limit(50)->get(), 'ops'),
@@ -281,6 +285,7 @@ class AdminController extends Controller
             'badge'    => $request->badge,
             'img'      => $request->img,
             'link'     => $request->link,
+            'subcats'  => $request->subcats ?? [],
             'featured' => (bool) $request->featured,
             'is_hero'  => (bool) $request->is_hero,
             'color'    => '#16357a',
@@ -301,6 +306,7 @@ class AdminController extends Controller
             'badge'    => $request->badge,
             'img'      => $request->img,
             'link'     => $request->link,
+            'subcats'  => $request->subcats ?? [],
             'featured' => (bool) $request->featured,
             'is_hero'  => (bool) $request->is_hero,
         ]);
@@ -365,6 +371,101 @@ class AdminController extends Controller
     public function bulkImportArticles(Request $request)
     {
         return $this->queueBulkImport($request, 'articles');
+    }
+
+    // ── Guides ────────────────────────────────────────────────
+
+    public function storeGuide(Request $request)
+    {
+        $request->validate(['title' => 'required|string']);
+        Guide::create([
+            'slug' => $request->slug ?: Str::slug($request->title),
+            'tag' => $request->tag ?? 'Fashion',
+            'title' => $request->title,
+            'excerpt' => $request->excerpt ?? '',
+            'img' => $request->img,
+            'read_time' => $request->readTime ?? '5 min',
+            'featured' => (bool) $request->featured,
+            'sort_order' => (int) ($request->sortOrder ?? 0),
+        ]);
+        return back();
+    }
+
+    public function updateGuide(Request $request, int $id)
+    {
+        Guide::findOrFail($id)->update([
+            'tag' => $request->tag,
+            'title' => $request->title,
+            'excerpt' => $request->excerpt,
+            'img' => $request->img,
+            'read_time' => $request->readTime,
+            'featured' => (bool) $request->featured,
+            'sort_order' => (int) ($request->sortOrder ?? 0),
+        ]);
+        return back();
+    }
+
+    public function destroyGuide(int $id)
+    {
+        Guide::findOrFail($id)->delete();
+        return back();
+    }
+
+    public function bulkImportGuide(Request $request)
+    {
+        return $this->queueBulkImport($request, 'guides');
+    }
+
+    // ── Static pages ──────────────────────────────────────────
+
+    public function storeStaticPage(Request $request)
+    {
+        $request->validate([
+            'key' => 'required|string|alpha_dash|unique:static_pages,key',
+            'title' => 'required|string',
+            'headline' => 'required|string',
+        ]);
+        StaticPage::create([
+            'key' => $request->key,
+            'title' => $request->title,
+            'eyebrow' => $request->eyebrow,
+            'headline' => $request->headline,
+            'lead' => $request->lead,
+            'hero_img' => $request->hero_img,
+            'sections' => $request->sections ?? [],
+            'note' => $request->note,
+            'cta_text' => $request->cta_text,
+            'cta_href' => $request->cta_href,
+            'has_form' => (bool) $request->has_form,
+        ]);
+        return back();
+    }
+
+    public function updateStaticPage(Request $request, int $id)
+    {
+        $request->validate([
+            'title' => 'required|string',
+            'headline' => 'required|string',
+        ]);
+        StaticPage::findOrFail($id)->update([
+            'title' => $request->title,
+            'eyebrow' => $request->eyebrow,
+            'headline' => $request->headline,
+            'lead' => $request->lead,
+            'hero_img' => $request->hero_img,
+            'sections' => $request->sections ?? [],
+            'note' => $request->note,
+            'cta_text' => $request->cta_text,
+            'cta_href' => $request->cta_href,
+            'has_form' => (bool) $request->has_form,
+        ]);
+        return back();
+    }
+
+    public function destroyStaticPage(int $id)
+    {
+        StaticPage::findOrFail($id)->delete();
+        return back();
     }
 
     // ── Looks ─────────────────────────────────────────────────

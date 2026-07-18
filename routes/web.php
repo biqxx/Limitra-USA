@@ -77,6 +77,15 @@ Route::middleware('admin')->group(function () {
     Route::delete('/admin/articles/{id}', [AdminController::class, 'destroyArticle'])->name('admin.articles.destroy');
     Route::post('/admin/articles/bulk-import', [AdminController::class, 'bulkImportArticles'])->name('admin.articles.bulk');
 
+    Route::post('/admin/guides', [AdminController::class, 'storeGuide'])->name('admin.guides.store');
+    Route::put('/admin/guides/{id}', [AdminController::class, 'updateGuide'])->name('admin.guides.update');
+    Route::delete('/admin/guides/{id}', [AdminController::class, 'destroyGuide'])->name('admin.guides.destroy');
+    Route::post('/admin/guides/bulk-import', [AdminController::class, 'bulkImportGuide'])->name('admin.guides.bulk');
+
+    Route::post('/admin/static-pages', [AdminController::class, 'storeStaticPage'])->name('admin.static-pages.store');
+    Route::put('/admin/static-pages/{id}', [AdminController::class, 'updateStaticPage'])->name('admin.static-pages.update');
+    Route::delete('/admin/static-pages/{id}', [AdminController::class, 'destroyStaticPage'])->name('admin.static-pages.destroy');
+
     Route::post('/admin/looks', [AdminController::class, 'storeLook'])->name('admin.looks.store');
     Route::put('/admin/looks/{id}', [AdminController::class, 'updateLook'])->name('admin.looks.update');
     Route::delete('/admin/looks/{id}', [AdminController::class, 'destroyLook'])->name('admin.looks.destroy');

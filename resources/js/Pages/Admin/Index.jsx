@@ -2024,9 +2024,305 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
   );
 }
 
+// ── Guides ────────────────────────────────────────────────────────────────────
+
+function GuidesAdminView({ guides, onToast }) {
+  const [editor, setEditor] = useState(null);
+
+  const del = (id) => {
+    if (!confirm('Delete this guide?')) return;
+    router.delete('/admin/guides/' + id, {
+      preserveState: true, preserveScroll: true,
+      onSuccess: () => onToast('Guide deleted.')
+    });
+  };
+
+  const save = (data, isEdit, id) => {
+    if (isEdit) {
+      router.put('/admin/guides/' + id, data, {
+        preserveState: true, preserveScroll: true,
+        onSuccess: () => { setEditor(null); onToast('Guide saved.'); }
+      });
+    } else {
+      router.post('/admin/guides', data, {
+        preserveState: true, preserveScroll: true,
+        onSuccess: () => { setEditor(null); onToast('Guide saved.'); }
+      });
+    }
+  };
+
+  return (
+    <>
+      <div className="adm-head"><div><h1>Buying Guides</h1><p>{guides.length} guides published.</p></div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <BulkImportButton
+            label="guides"
+            headers={['slug', 'title', 'tag', 'excerpt', 'img', 'read_time', 'featured']}
+            sample={{
+              slug: 'capsule-wardrobe-2026', title: 'Building a Capsule Wardrobe', tag: 'Fashion',
+              excerpt: 'Short summary shown on the guide card.', img: 'https://example.com/hero.jpg',
+              read_time: '6 min', featured: 'FALSE',
+            }}
+            existing={guides}
+            parseRow={(raw) => ({
+              slug: raw.slug, title: raw.title, tag: raw.tag, excerpt: raw.excerpt,
+              img: raw.img, readTime: raw.read_time, featured: toBool(raw.featured),
+            })}
+            matchExisting={(raw, data, existing) => (data.slug ? existing.find((g) => g.slug === admSlug(data.slug)) : null)}
+            getId={(g) => g.id}
+            summarize={(data, match) => `${data.title || '(no title)'}${match ? ' → updates “' + match.title + '”' : ''}`}
+            importUrl="/admin/guides/bulk-import"
+            onToast={onToast}
+          />
+          <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> New guide</button>
+        </div></div>
+      <div className="adm-panel">
+        {guides.length === 0 ? (
+          <div className="adm-empty"><I.box width="40" height="40" /><p style={{ margin: 0 }}>No guides yet.</p></div>
+        ) : (
+          <table className="adm-table">
+            <thead><tr><th></th><th>Guide</th><th>Tag</th><th>Read time</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead>
+            <tbody>{guides.map((g) => (
+              <tr key={g.id}>
+                <td style={{ width: 70 }}>{g.img ? <img className="adm-thumb" src={g.img} alt="" /> : <span className="adm-thumb ph"><I.image width="16" height="16" /></span>}</td>
+                <td><div className="adm-pname">{g.title}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{g.excerpt ? g.excerpt.slice(0, 60) + '…' : ''}</div></td>
+                <td><span className="adm-tag cat">{g.tag}</span></td>
+                <td style={{ fontSize: 12, color: 'var(--muted)' }}>{g.read_time}</td>
+                <td className="adm-row-actions">
+                  <button className="adm-icon" onClick={() => setEditor(g)} aria-label="Edit"><I.edit /></button>
+                  <button className="adm-icon danger" onClick={() => del(g.id)} aria-label="Delete"><I.trash /></button>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </div>
+      {editor && (
+        <div className="adm-overlay" onMouseDown={() => setEditor(null)}>
+          <div className="adm-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="adm-modal-head"><h2>{editor.id ? 'Edit guide' : 'New guide'}</h2>
+              <button className="adm-close" onClick={() => setEditor(null)}><I.close /></button></div>
+            <div className="adm-modal-body">
+              <GuideEditor initial={editor} onCancel={() => setEditor(null)} onSave={save} existing={guides.map((g) => g.slug)} />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function GuideEditor({ initial, onCancel, onSave, existing }) {
+  const isEdit = !!(initial && initial.id);
+  const [title, setTitle] = useState(initial.title || '');
+  const [tag, setTag] = useState(initial.tag || 'Fashion');
+  const [excerpt, setExcerpt] = useState(initial.excerpt || '');
+  const [img, setImg] = useState(initial.img || '');
+  const [readTime, setReadTime] = useState(initial.read_time || '5 min');
+  const [featured, setFeatured] = useState(initial.featured || false);
+  const [err, setErr] = useState('');
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
+  const submit = () => {
+    if (!title.trim()) return setErr('Title required.');
+    const slug = initial.slug || admSlug(title);
+    if (!isEdit && existing.includes(slug)) return setErr(`Slug "${slug}" already exists.`);
+    onSave({ slug, tag, title: title.trim(), excerpt: excerpt.trim(), img, readTime, featured }, isEdit, initial.id);
+  };
+  return (
+    <div className="adm-form">
+      <div className="adm-grid2">
+        <div className="adm-field"><label>Title <span className="req">*</span></label><input className="adm-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Building a Capsule Wardrobe" /></div>
+        <div className="adm-field"><label>Tag</label>
+          <select className="adm-input" value={tag} onChange={(e) => setTag(e.target.value)}>{ART_TAGS.map((t) => <option key={t}>{t}</option>)}</select></div>
+      </div>
+      <div className="adm-field"><label>Excerpt</label><textarea className="adm-textarea" style={{ minHeight: 60 }} value={excerpt} onChange={(e) => setExcerpt(e.target.value)} placeholder="Short summary shown on the guide card…" /></div>
+      <ImgInput label="Guide image" value={img} onChange={setImg} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+      <div className="adm-field"><label>Read time</label><input className="adm-input" value={readTime} onChange={(e) => setReadTime(e.target.value)} placeholder="e.g. 6 min" /></div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 14, color: 'var(--ink)', cursor: 'pointer' }}>
+        <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} />
+        Featured (shown as the large hero guide at the top of the Guides page)
+      </label>
+      <div className="adm-form-foot">{err && <span className="err">{err}</span>}<span className="spacer"></span>
+        <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={imgBusy}><I.check /> {isEdit ? 'Save' : 'Publish'} guide</button></div>
+    </div>
+  );
+}
+
+// ── Static pages ────────────────────────────────────────────────────────────
+
+function StaticPagesAdminView({ staticPages, onToast }) {
+  const [editor, setEditor] = useState(null);
+
+  const del = (id) => {
+    if (!confirm('Delete this page? Any links pointing to it will 404.')) return;
+    router.delete('/admin/static-pages/' + id, {
+      preserveState: true, preserveScroll: true,
+      onSuccess: () => onToast('Page deleted.')
+    });
+  };
+
+  const save = (data, isEdit, id) => {
+    if (isEdit) {
+      router.put('/admin/static-pages/' + id, data, {
+        preserveState: true, preserveScroll: true,
+        onSuccess: () => { setEditor(null); onToast('Page saved.'); }
+      });
+    } else {
+      router.post('/admin/static-pages', data, {
+        preserveState: true, preserveScroll: true,
+        onSuccess: () => { setEditor(null); onToast('Page saved.'); }
+      });
+    }
+  };
+
+  return (
+    <>
+      <div className="adm-head"><div><h1>Site Pages</h1><p>Edit the content of About, Careers, Contact, Privacy and other static pages — reachable at /page/&#123;key&#125;.</p></div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="adm-btn adm-btn-primary" onClick={() => setEditor({})}><I.plus /> New page</button>
+        </div></div>
+      <div className="adm-panel">
+        {staticPages.length === 0 ? (
+          <div className="adm-empty"><I.box width="40" height="40" /><p style={{ margin: 0 }}>No pages yet.</p></div>
+        ) : (
+          <table className="adm-table">
+            <thead><tr><th></th><th>Page</th><th>Path</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead>
+            <tbody>{staticPages.map((p) => (
+              <tr key={p.id}>
+                <td style={{ width: 70 }}>{p.hero_img ? <img className="adm-thumb" src={p.hero_img} alt="" /> : <span className="adm-thumb ph"><I.image width="16" height="16" /></span>}</td>
+                <td><div className="adm-pname">{p.title}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.headline}</div></td>
+                <td style={{ fontSize: 12, color: 'var(--muted)' }}>/page/{p.key}</td>
+                <td className="adm-row-actions">
+                  <a className="adm-icon" href={'/page/' + p.key} target="_blank" rel="noopener" aria-label="Preview"><I.eye /></a>
+                  <button className="adm-icon" onClick={() => setEditor(p)} aria-label="Edit"><I.edit /></button>
+                  <button className="adm-icon danger" onClick={() => del(p.id)} aria-label="Delete"><I.trash /></button>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </div>
+      {editor && (
+        <div className="adm-overlay" onMouseDown={() => setEditor(null)}>
+          <div className="adm-modal" style={{ width: 'min(900px,98vw)' }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="adm-modal-head"><h2>{editor.id ? 'Edit page' : 'New page'}</h2>
+              <button className="adm-close" onClick={() => setEditor(null)}><I.close /></button></div>
+            <div className="adm-modal-body">
+              <StaticPageEditor initial={editor} onCancel={() => setEditor(null)} onSave={save} existing={staticPages.map((p) => p.key)} />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function StaticPageEditor({ initial, onCancel, onSave, existing }) {
+  const isEdit = !!(initial && initial.id);
+  const [key, setKey] = useState(initial.key || '');
+  const [title, setTitle] = useState(initial.title || '');
+  const [eyebrow, setEyebrow] = useState(initial.eyebrow || '');
+  const [headline, setHeadline] = useState(initial.headline || '');
+  const [lead, setLead] = useState(initial.lead || '');
+  const [heroImg, setHeroImg] = useState(initial.hero_img || '');
+  const [sections, setSections] = useState(
+    (initial.sections || []).map((s) => s.list
+      ? { type: 'list', h: s.h || '', body: '', items: (s.list || []).join('\n') }
+      : { type: 'text', h: s.h || '', body: s.body || '', items: '' })
+  );
+  const [note, setNote] = useState(initial.note || '');
+  const [ctaText, setCtaText] = useState(initial.cta_text || '');
+  const [ctaHref, setCtaHref] = useState(initial.cta_href || '');
+  const [hasForm, setHasForm] = useState(initial.has_form || false);
+  const [err, setErr] = useState('');
+  const [imgBusy, bumpImgBusy] = useUploadBusy();
+
+  const setSection = (i, patch) => { const n = [...sections]; n[i] = { ...n[i], ...patch }; setSections(n); };
+  const addSection = (type) => setSections([...sections, { type, h: '', body: '', items: '' }]);
+  const delSection = (i) => setSections(sections.filter((_, j) => j !== i));
+
+  const submit = () => {
+    if (!title.trim()) return setErr('Title required.');
+    if (!headline.trim()) return setErr('Headline required.');
+    const pageKey = isEdit ? initial.key : (key.trim() ? admSlug(key) : admSlug(title));
+    if (!isEdit && existing.includes(pageKey)) return setErr(`Path "${pageKey}" already exists.`);
+    const builtSections = sections
+      .filter((s) => s.h.trim())
+      .map((s) => s.type === 'list'
+        ? { h: s.h.trim(), list: s.items.split('\n').map((li) => li.trim()).filter(Boolean) }
+        : { h: s.h.trim(), body: s.body.trim() });
+    onSave({
+      key: pageKey, title: title.trim(), eyebrow: eyebrow.trim(), headline: headline.trim(),
+      lead: lead.trim(), hero_img: heroImg, sections: builtSections, note: note.trim(),
+      cta_text: ctaText.trim(), cta_href: ctaHref.trim(), has_form: hasForm,
+    }, isEdit, initial.id);
+  };
+
+  return (
+    <div className="adm-form">
+      <div className="adm-grid2">
+        <div className="adm-field"><label>Title <span className="req">*</span></label><input className="adm-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. About Us" /></div>
+        <div className="adm-field">
+          <label>Page path {!isEdit && <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional — defaults from title)</span>}</label>
+          {isEdit ? (
+            <input className="adm-input" value={'/page/' + key} disabled />
+          ) : (
+            <input className="adm-input" value={key} onChange={(e) => setKey(e.target.value)} placeholder="e.g. about" />
+          )}
+        </div>
+      </div>
+      <div className="adm-grid2">
+        <div className="adm-field"><label>Eyebrow label</label><input className="adm-input" value={eyebrow} onChange={(e) => setEyebrow(e.target.value)} placeholder="e.g. Our Story" /></div>
+        <div className="adm-field"><label>Headline <span className="req">*</span></label><input className="adm-input" value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="e.g. Smarter Shopping Starts with Better Discovery." /></div>
+      </div>
+      <div className="adm-field"><label>Lead paragraph</label><textarea className="adm-textarea" style={{ minHeight: 60 }} value={lead} onChange={(e) => setLead(e.target.value)} placeholder="Short intro shown below the headline…" /></div>
+      <ImgInput label="Hero image (optional)" value={heroImg} onChange={setHeroImg} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+
+      <div className="adm-section-title">Page sections</div>
+      {sections.map((s, i) => (
+        <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 9, padding: 12, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <select className="adm-select" style={{ fontSize: 12 }} value={s.type} onChange={(e) => setSection(i, { type: e.target.value })}>
+              <option value="text">text</option>
+              <option value="list">list</option>
+            </select>
+            <span style={{ flex: 1 }}></span>
+            <button type="button" className="adm-icon danger" onClick={() => delSection(i)} aria-label="Delete"><I.trash /></button>
+          </div>
+          <input className="adm-input" style={{ marginBottom: 8 }} value={s.h} onChange={(e) => setSection(i, { h: e.target.value })} placeholder="Section heading" />
+          {s.type === 'list' ? (
+            <textarea className="adm-textarea" style={{ minHeight: 80 }} value={s.items} onChange={(e) => setSection(i, { items: e.target.value })} placeholder={'One list item per line…'} />
+          ) : (
+            <textarea className="adm-textarea" style={{ minHeight: 80 }} value={s.body} onChange={(e) => setSection(i, { body: e.target.value })} placeholder="Section paragraph…" />
+          )}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4, marginBottom: 20 }}>
+        <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => addSection('text')}><I.plus width="12" height="12" /> text section</button>
+        <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => addSection('list')}><I.plus width="12" height="12" /> list section</button>
+      </div>
+
+      <div className="adm-field"><label>Note <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional — small callout shown below the sections)</span></label><textarea className="adm-textarea" style={{ minHeight: 50 }} value={note} onChange={(e) => setNote(e.target.value)} /></div>
+      <div className="adm-grid2">
+        <div className="adm-field"><label>CTA button text</label><input className="adm-input" value={ctaText} onChange={(e) => setCtaText(e.target.value)} placeholder="e.g. Explore Curated Finds" /></div>
+        <div className="adm-field"><label>CTA button link</label><input className="adm-input" value={ctaHref} onChange={(e) => setCtaHref(e.target.value)} placeholder="/collection/new" /></div>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 14, color: 'var(--ink)', cursor: 'pointer' }}>
+        <input type="checkbox" checked={hasForm} onChange={(e) => setHasForm(e.target.checked)} />
+        Show the contact form at the bottom of this page
+      </label>
+
+      <div className="adm-form-foot">{err && <span className="err">{err}</span>}<span className="spacer"></span>
+        <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={imgBusy}><I.check /> {isEdit ? 'Save' : 'Publish'} page</button></div>
+    </div>
+  );
+}
+
 // ── Occasions ─────────────────────────────────────────────────────────────────
 
-function OccasionsAdminView({ occasions, onToast }) {
+function OccasionsAdminView({ occasions, categories, onToast }) {
   const [editor, setEditor] = useState(null);
 
   const del = (id) => {
@@ -2104,7 +2400,7 @@ function OccasionsAdminView({ occasions, onToast }) {
             <div className="adm-modal-head"><h2>{editor.id ? 'Edit occasion' : 'New occasion'}</h2>
               <button className="adm-close" onClick={() => setEditor(null)}><I.close /></button></div>
             <div className="adm-modal-body">
-              <OccEditor initial={editor} onCancel={() => setEditor(null)} onSave={save} existing={occasions.map((o) => o.key)} />
+              <OccEditor initial={editor} onCancel={() => setEditor(null)} onSave={save} existing={occasions.map((o) => o.key)} categories={categories} />
             </div>
           </div>
         </div>
@@ -2113,7 +2409,7 @@ function OccasionsAdminView({ occasions, onToast }) {
   );
 }
 
-function OccEditor({ initial, onCancel, onSave, existing }) {
+function OccEditor({ initial, onCancel, onSave, existing, categories }) {
   const isEdit = !!(initial && initial.id);
   const [title, setTitle] = useState(initial.title || '');
   const [eyebrow, setEyebrow] = useState(initial.eyebrow || '');
@@ -2121,15 +2417,18 @@ function OccEditor({ initial, onCancel, onSave, existing }) {
   const [badge, setBadge] = useState(initial.badge || '');
   const [img, setImg] = useState(initial.img || '');
   const [link, setLink] = useState(initial.link || '/collection/');
+  const [subcats, setSubcats] = useState((initial.subcats || []).join(', '));
   const [featured, setFeatured] = useState(initial.featured || false);
   const [isHero, setIsHero] = useState(initial.is_hero || false);
   const [err, setErr] = useState('');
   const [imgBusy, bumpImgBusy] = useUploadBusy();
+  const availableSubcats = (categories || []).flatMap((c) => c.subs || []);
   const submit = () => {
     if (!title.trim()) return setErr('Title required.');
     const key = initial.key || admSlug(title);
     if (!isEdit && existing.includes(key)) return setErr(`Key "${key}" already exists.`);
-    onSave({ key, title: title.trim(), eyebrow: eyebrow.trim(), tagline: tagline.trim(), badge: badge.trim(), img, link, featured, is_hero: isHero }, isEdit, initial.id);
+    const subcatsList = subcats.split(',').map((s) => s.trim()).filter(Boolean);
+    onSave({ key, title: title.trim(), eyebrow: eyebrow.trim(), tagline: tagline.trim(), badge: badge.trim(), img, link, subcats: subcatsList, featured, is_hero: isHero }, isEdit, initial.id);
   };
   return (
     <div className="adm-form">
@@ -2141,6 +2440,13 @@ function OccEditor({ initial, onCancel, onSave, existing }) {
       <div className="adm-grid2">
         <div className="adm-field"><label>Badge</label><input className="adm-input" value={badge} onChange={(e) => setBadge(e.target.value)} placeholder="e.g. 💝 Valentine's" /></div>
         <div className="adm-field"><label>Collection link</label><input className="adm-input" value={link} onChange={(e) => setLink(e.target.value)} /></div>
+      </div>
+      <div className="adm-field">
+        <label>Curated subcategories <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional — comma separated; leave blank to show all products)</span></label>
+        <input className="adm-input" value={subcats} onChange={(e) => setSubcats(e.target.value)} placeholder="e.g. Dresses, Jewelry, Fragrances" />
+        {availableSubcats.length > 0 && (
+          <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 0' }}>Available: {availableSubcats.join(', ')}</p>
+        )}
       </div>
       <ImgInput label="Occasion image" value={img} onChange={setImg} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -2346,7 +2652,11 @@ function SettingsView({ settings, onToast }) {
             <div className="adm-field"><label>Pinterest URL</label><input className="adm-input" value={form.social_pinterest_url || ''} onChange={(e) => set('social_pinterest_url', e.target.value)} placeholder="https://pinterest.com/limitrausa" /></div>
             <div className="adm-field"><label>X (Twitter) URL</label><input className="adm-input" value={form.social_x_url || ''} onChange={(e) => set('social_x_url', e.target.value)} placeholder="https://x.com/limitrausa" /></div>
           </div>
-          <div className="adm-field"><label>TikTok URL</label><input className="adm-input" value={form.social_tiktok_url || ''} onChange={(e) => set('social_tiktok_url', e.target.value)} placeholder="https://tiktok.com/@limitrausa" /></div>
+          <div className="adm-grid2">
+            <div className="adm-field"><label>TikTok URL</label><input className="adm-input" value={form.social_tiktok_url || ''} onChange={(e) => set('social_tiktok_url', e.target.value)} placeholder="https://tiktok.com/@limitrausa" /></div>
+            <div className="adm-field"><label>LinkedIn URL</label><input className="adm-input" value={form.social_linkedin_url || ''} onChange={(e) => set('social_linkedin_url', e.target.value)} placeholder="https://linkedin.com/company/limitrausa" /></div>
+          </div>
+          <div className="adm-field"><label>Snapchat URL</label><input className="adm-input" value={form.social_snapchat_url || ''} onChange={(e) => set('social_snapchat_url', e.target.value)} placeholder="https://snapchat.com/add/limitrausa" /></div>
         </div>
       </div>
       <div className="adm-panel">
@@ -2488,7 +2798,7 @@ function LogoutButton() {
 export default function AdminIndex() {
   const { props } = usePage();
   const {
-    products = [], categories = [], occasions = [], articles = [], looks = [], videos = [], settings = {}, bulkImports = [], analytics = {},
+    products = [], categories = [], occasions = [], articles = [], guides = [], staticPages = [], looks = [], videos = [], settings = {}, bulkImports = [], analytics = {},
     productsCount = 0, featuredCount = 0, resortCount = 0, linkedCount = 0, recentProducts = [], pendingImportsCount = 0,
   } = props;
 
@@ -2534,6 +2844,8 @@ export default function AdminIndex() {
     { key: 'looks', label: 'Style the Look', icon: 'bookmark' },
     { key: 'videos', label: 'Videos', icon: 'image' },
     { key: 'journal', label: 'Journal', icon: 'link' },
+    { key: 'guides', label: 'Guides', icon: 'box' },
+    { key: 'static-pages', label: 'Site Pages', icon: 'grid' },
     { key: 'occasions', label: 'Occasions', icon: 'heart' },
     { key: 'bulk-imports', label: 'Bulk Uploads', icon: 'upload', badge: pendingImportsCount || null },
     { key: 'settings', label: 'Settings', icon: 'edit' },
@@ -2601,9 +2913,19 @@ export default function AdminIndex() {
               <JournalView articles={articles} products={products} onToast={admToast} />
             </Deferred>
           )}
+          {view === 'guides' && (
+            <Deferred data="guides" fallback={<AdmTabSkeleton />}>
+              <GuidesAdminView guides={guides} onToast={admToast} />
+            </Deferred>
+          )}
+          {view === 'static-pages' && (
+            <Deferred data="staticPages" fallback={<AdmTabSkeleton />}>
+              <StaticPagesAdminView staticPages={staticPages} onToast={admToast} />
+            </Deferred>
+          )}
           {view === 'occasions' && (
-            <Deferred data="occasions" fallback={<AdmTabSkeleton />}>
-              <OccasionsAdminView occasions={occasions} onToast={admToast} />
+            <Deferred data={['occasions', 'categories']} fallback={<AdmTabSkeleton />}>
+              <OccasionsAdminView occasions={occasions} categories={categories} onToast={admToast} />
             </Deferred>
           )}
           {view === 'bulk-imports' && (
