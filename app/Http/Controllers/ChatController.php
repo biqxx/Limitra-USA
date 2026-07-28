@@ -105,26 +105,45 @@ class ChatController extends Controller
             ]);
         }
 
-        // Step 2: Product search (also runs — with an empty catalog — if scanning failed
+        // Step 2: Product search (also runs — with an empty list — if scanning failed
         // entirely or found no search terms, degrading to the existing no-match fallback)
-        $catalog  = '';
+        $products = [];
         $tokenMap = [];
         if ($scan['needs_products'] && ! empty($scan['search'])) {
             Log::info('[Chat] Step 2 — searching products', ['search' => $scan['search']]);
-            $result       = $this->searchProducts($scan['search']);
-            $catalog      = $result['catalog'];
-            $tokenMap     = $result['map'];
-            $productCount = count($tokenMap);
-            Log::info('[Chat] Product search complete', ['products_found' => $productCount]);
+            $result   = $this->searchProducts($scan['search']);
+            $products = $result['products'];
+            $tokenMap = $result['map'];
+            Log::info('[Chat] Product search complete', ['products_found' => count($products)]);
         } else {
             Log::info('[Chat] Step 2 — skipped (no product search needed)');
         }
 
-        $system = $this->buildSystemPrompt($catalog);
+        $system = $this->buildSystemPrompt(! empty($products));
+
+        // Ground the model on exactly what's being asked and exactly what it may
+        // recommend from — the last user turn's content becomes a single structured
+        // JSON object instead of a bare string, so the model can't blend the actual
+        // question or the actual catalog with anything else (prior turns, its own
+        // outside "knowledge" of brands, etc.). This is the main lever against
+        // hallucination: explicit, isolated fields beat prose glued into a system prompt.
+        $groundedMessages = $messages;
+        $lastIndex = count($groundedMessages) - 1;
+        $groundedMessages[$lastIndex] = [
+            'role'    => 'user',
+            'content' => json_encode([
+                'user'     => $groundedMessages[$lastIndex]['content'] ?? '',
+                'system'   => 'Answer only what the "user" field asks. Use ONLY the products listed in "products" '
+                    . '(if any) — never reference, describe, or imply any product, brand, or item that is not in '
+                    . 'that array, even if you recognize it from general knowledge. If "products" is empty, do not '
+                    . 'name or imply any specific product.',
+                'products' => $products,
+            ], JSON_UNESCAPED_UNICODE),
+        ];
 
         Log::info('[Chat] Step 3 — starting stream');
 
-        return response()->stream(function () use ($provider, $system, $messages, $tokenMap, $user) {
+        return response()->stream(function () use ($provider, $system, $groundedMessages, $tokenMap, $user) {
             while (ob_get_level() > 0) ob_end_flush();
 
             // Buffers a possible partial "<product:..." tag across chunk boundaries, then
@@ -159,7 +178,7 @@ class ChatController extends Controller
             };
 
             try {
-                $provider->stream($system, $messages, $flushChunk);
+                $provider->stream($system, $groundedMessages, $flushChunk);
 
                 if ($tagBuffer !== '') {
                     $tail = $this->substituteProductTokens($tagBuffer, $tokenMap);
@@ -407,7 +426,7 @@ class ChatController extends Controller
 
     // ── Product search orchestrator ───────────────────────────────────────────
 
-    /** @return array{catalog: string, map: array<string,string>} */
+    /** @return array{products: array, map: array<string,string>} */
     private function searchProducts(array $search): array
     {
         $query = Product::with(['category', 'subcategory']);
@@ -449,36 +468,40 @@ class ChatController extends Controller
                 'sql'   => $query->toSql(),
                 'file'  => $e->getFile() . ':' . $e->getLine(),
             ]);
-            return ['catalog' => '', 'map' => []];
+            return ['products' => [], 'map' => []];
         }
 
         Log::info('[Chat] Query returned ' . $products->count() . ' product(s)', [
             'ids' => $products->pluck('id')->all(),
         ]);
 
-        if ($products->isEmpty()) return ['catalog' => '', 'map' => []];
+        if ($products->isEmpty()) return ['products' => [], 'map' => []];
 
         // Give the AI a short token instead of the real UUID — LLMs reliably reproduce
         // "p1" inline but frequently mistype long random UUIDs, breaking the <product:ID>
         // tag. The real ID is substituted back in server-side before the reply is sent
         // (see substituteProductTokens()); the frontend never needs to see the token.
+        //
+        // Returned as a structured array (not a formatted text blob) so it can be embedded
+        // as-is in the {user, system, products} JSON sent to the model — a clean, unambiguous
+        // data boundary the model can be strictly instructed to stay within, rather than prose
+        // it might paraphrase or blend with outside knowledge.
         $map = [];
-        $catalog = $products->map(function ($p, $i) use (&$map) {
+        $structured = $products->map(function ($p, $i) use (&$map) {
             $token = 'p' . ($i + 1);
             $map[$token] = (string) $p->id;
 
-            $parts = [
-                'ID: '       . $token,
-                'Name: '     . $p->name,
-                'Brand: '    . ($p->brand ?? 'Limitra Select'),
-                'Category: ' . implode(' › ', array_filter([$p->category?->name, $p->subcategory?->name])),
-                'Price: '    . $p->price,
+            return [
+                'id'          => $token,
+                'name'        => $p->name,
+                'brand'       => $p->brand ?? 'Limitra Select',
+                'category'    => implode(' › ', array_filter([$p->category?->name, $p->subcategory?->name])),
+                'price'       => $p->price,
+                'description' => $p->description,
             ];
-            if ($p->description) $parts[] = 'Description: ' . $p->description;
-            return implode(' | ', $parts);
-        })->implode("\n");
+        })->values()->toArray();
 
-        return ['catalog' => $catalog, 'map' => $map];
+        return ['products' => $structured, 'map' => $map];
     }
 
     /** Replaces AI-typed <product:TOKEN> short tokens with the real product ID. */
@@ -508,32 +531,56 @@ class ChatController extends Controller
 
     // ── System prompt ─────────────────────────────────────────────────────────
 
-    private function buildSystemPrompt(string $catalog): string
+    private function buildSystemPrompt(bool $hasProducts): string
     {
-        if ($catalog) {
-            $productSection = <<<SECTION
-RELEVANT PRODUCTS:
-{$catalog}
+        $formatSection = <<<SECTION
+MESSAGE FORMAT
 
-SHOWING PRODUCTS TO THE CUSTOMER:
-These products were already searched and matched for this customer's request — this is not a
-case of missing information. You MUST recommend at least one of them by name, with its tag,
-in this reply. Do not withhold a recommendation to ask a clarifying question instead; ask a
-brief refining question afterward only if it genuinely helps, but never in place of
-recommending from this list.
+The customer's current message does not arrive as plain text. It arrives as the next user turn,
+formatted as a single JSON object with exactly these fields:
+  {"user": "<the customer's literal message, verbatim>", "system": "<a short reinforcement of the grounding rules below>", "products": [ ... ]}
+
+Read "user" as the only thing the customer actually said this turn — answer that, specifically,
+not a generalization of it. Prior turns in the conversation are still plain text and are
+context only.
+SECTION;
+
+        if ($hasProducts) {
+            $productSection = <<<SECTION
+"products" is a non-empty array of objects, each shaped:
+  {"id": "p1", "name": "...", "brand": "...", "category": "...", "price": "...", "description": "..."}
+
+These were already searched and matched for this customer's request — this is not a case of
+missing information. You MUST recommend at least one of them by name, with its tag, in this
+reply. Do not withhold a recommendation to ask a clarifying question instead; ask a brief
+refining question afterward only if it genuinely helps, but never in place of recommending
+from this list.
+
+STRICT GROUNDING RULES:
+- Only reference products that appear in "products". Never name, describe, or imply the
+  existence of any other product, brand, or item — including ones you recognize from general
+  knowledge — that is not in that array. If it is not in "products", it does not exist for
+  this reply.
+- Only use the fields given for each product (name, brand, category, price, description).
+  Never invent additional attributes, specifications, materials, reviews, ratings, or
+  availability beyond what is provided.
+
 When you mention a product, embed its tag immediately after naming it so a clickable card appears in the chat:
   <product:TOKEN>
-Use the exact token from the "ID:" field (e.g. "p1") — do not invent or modify it. Example:
+Use the exact token from the "id" field (e.g. "p1") — do not invent or modify it. Example:
   "I'd start with the Limitra Linen Blazer <product:p1> — it anchors any look effortlessly."
 Always embed 2–4 product tags per reply. Never skip the tag when recommending a product.
 SECTION;
         } else {
-            $productSection = 'No specific products matched this query. Give helpful general shopping advice and ask a clarifying question to better understand what the customer needs. Do not embed any product tags.';
+            $productSection = '"products" is an empty array — no specific products matched this query. Give helpful '
+                . 'general shopping advice and ask a clarifying question to better understand what the customer '
+                . 'needs. Do not name, describe, or imply any specific product, brand, or item — there is nothing '
+                . 'to recommend from yet. Do not embed any product tags.';
         }
 
         static $base = null;
         $base ??= require resource_path('prompts/elo-system-prompt.php');
 
-        return $this->resolvePlaceholders($base) . "\n\n" . $productSection;
+        return $this->resolvePlaceholders($base) . "\n\n" . $formatSection . "\n\n" . $productSection;
     }
 }
