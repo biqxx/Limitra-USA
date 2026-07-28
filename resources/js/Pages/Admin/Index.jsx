@@ -2026,7 +2026,7 @@ function ArticleEditor({ initial, products, onCancel, onSave, existing }) {
 
 // ── Guides ────────────────────────────────────────────────────────────────────
 
-function GuidesAdminView({ guides, onToast }) {
+function GuidesAdminView({ guides, products, onToast }) {
   const [editor, setEditor] = useState(null);
 
   const del = (id) => {
@@ -2089,6 +2089,7 @@ function GuidesAdminView({ guides, onToast }) {
                 <td><span className="adm-tag cat">{g.tag}</span></td>
                 <td style={{ fontSize: 12, color: 'var(--muted)' }}>{g.read_time}</td>
                 <td className="adm-row-actions">
+                  <a className="adm-icon" href={'/guide/' + g.slug} target="_blank" rel="noopener" aria-label="Preview"><I.eye /></a>
                   <button className="adm-icon" onClick={() => setEditor(g)} aria-label="Edit"><I.edit /></button>
                   <button className="adm-icon danger" onClick={() => del(g.id)} aria-label="Delete"><I.trash /></button>
                 </td>
@@ -2099,11 +2100,11 @@ function GuidesAdminView({ guides, onToast }) {
       </div>
       {editor && (
         <div className="adm-overlay" onMouseDown={() => setEditor(null)}>
-          <div className="adm-modal" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="adm-modal" style={{ width: 'min(900px,98vw)' }} onMouseDown={(e) => e.stopPropagation()}>
             <div className="adm-modal-head"><h2>{editor.id ? 'Edit guide' : 'New guide'}</h2>
               <button className="adm-close" onClick={() => setEditor(null)}><I.close /></button></div>
             <div className="adm-modal-body">
-              <GuideEditor initial={editor} onCancel={() => setEditor(null)} onSave={save} existing={guides.map((g) => g.slug)} />
+              <GuideEditor initial={editor} products={products} onCancel={() => setEditor(null)} onSave={save} existing={guides.map((g) => g.slug)} />
             </div>
           </div>
         </div>
@@ -2112,7 +2113,7 @@ function GuidesAdminView({ guides, onToast }) {
   );
 }
 
-function GuideEditor({ initial, onCancel, onSave, existing }) {
+function GuideEditor({ initial, products, onCancel, onSave, existing }) {
   const isEdit = !!(initial && initial.id);
   const [title, setTitle] = useState(initial.title || '');
   const [tag, setTag] = useState(initial.tag || 'Fashion');
@@ -2120,13 +2121,24 @@ function GuideEditor({ initial, onCancel, onSave, existing }) {
   const [img, setImg] = useState(initial.img || '');
   const [readTime, setReadTime] = useState(initial.read_time || '5 min');
   const [featured, setFeatured] = useState(initial.featured || false);
+  const [sections, setSections] = useState(
+    (initial.sections || []).map((s) => ({ title: s.title || '', product_ids: s.product_ids || [] }))
+  );
   const [err, setErr] = useState('');
   const [imgBusy, bumpImgBusy] = useUploadBusy();
+
+  const setSection = (i, patch) => { const n = [...sections]; n[i] = { ...n[i], ...patch }; setSections(n); };
+  const addSection = () => setSections([...sections, { title: '', product_ids: [] }]);
+  const delSection = (i) => setSections(sections.filter((_, j) => j !== i));
+
   const submit = () => {
     if (!title.trim()) return setErr('Title required.');
     const slug = initial.slug || admSlug(title);
     if (!isEdit && existing.includes(slug)) return setErr(`Slug "${slug}" already exists.`);
-    onSave({ slug, tag, title: title.trim(), excerpt: excerpt.trim(), img, readTime, featured }, isEdit, initial.id);
+    const builtSections = sections
+      .filter((s) => s.title.trim() && s.product_ids.length > 0)
+      .map((s) => ({ title: s.title.trim(), product_ids: s.product_ids }));
+    onSave({ slug, tag, title: title.trim(), excerpt: excerpt.trim(), img, readTime, featured, sections: builtSections }, isEdit, initial.id);
   };
   return (
     <div className="adm-form">
@@ -2142,6 +2154,24 @@ function GuideEditor({ initial, onCancel, onSave, existing }) {
         <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} />
         Featured (shown as the large hero guide at the top of the Guides page)
       </label>
+
+      <div className="adm-section-title">Guide page sections</div>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: -4, marginBottom: 8 }}>
+        This guide works like a category page — add one or more titled sections (e.g. "Wedding Dresses", "Bridal Beauty") and attach the products that should appear under each, in the order shown.
+      </p>
+      {sections.map((s, i) => (
+        <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 9, padding: 12, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <input className="adm-input" style={{ flex: 1 }} value={s.title} onChange={(e) => setSection(i, { title: e.target.value })} placeholder="Section title, e.g. Wedding Dresses" />
+            <button type="button" className="adm-icon danger" onClick={() => delSection(i)} aria-label="Delete section"><I.trash /></button>
+          </div>
+          <VideoProductPicker selectedIds={s.product_ids} onChange={(ids) => setSection(i, { product_ids: ids })} products={products || []} />
+        </div>
+      ))}
+      <div style={{ marginTop: 4, marginBottom: 20 }}>
+        <button type="button" className="adm-btn adm-btn-ghost sm" onClick={addSection}><I.plus width="12" height="12" /> Add section</button>
+      </div>
+
       <div className="adm-form-foot">{err && <span className="err">{err}</span>}<span className="spacer"></span>
         <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
         <button type="button" className="adm-btn adm-btn-primary" onClick={submit} disabled={imgBusy}><I.check /> {isEdit ? 'Save' : 'Publish'} guide</button></div>
@@ -2914,8 +2944,8 @@ export default function AdminIndex() {
             </Deferred>
           )}
           {view === 'guides' && (
-            <Deferred data="guides" fallback={<AdmTabSkeleton />}>
-              <GuidesAdminView guides={guides} onToast={admToast} />
+            <Deferred data={['guides', 'products']} fallback={<AdmTabSkeleton />}>
+              <GuidesAdminView guides={guides} products={products} onToast={admToast} />
             </Deferred>
           )}
           {view === 'static-pages' && (

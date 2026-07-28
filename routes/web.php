@@ -27,6 +27,7 @@ Route::get('/product/{id}', [ProductController::class, 'show'])->name('product.s
 Route::get('/collection/{type}', [CollectionController::class, 'show'])->name('collection.show');
 Route::get('/article/{slug}', [ArticleController::class, 'show'])->name('article.show');
 Route::get('/guides', [GuidesController::class, 'index'])->name('guides.index');
+Route::get('/guide/{slug}', [GuidesController::class, 'show'])->name('guide.show');
 Route::get('/looks', [StyleLookController::class, 'index'])->name('looks.index');
 Route::get('/look/{slug}', [StyleLookController::class, 'show'])->name('look.show');
 Route::get('/page/{page}', [StaticPageController::class, 'show'])->name('page.show');

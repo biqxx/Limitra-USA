@@ -49,7 +49,7 @@ export default function Guides() {
               <span className="guide-tag">Featured · {featured.tag}</span>
               <h2>{featured.title}</h2>
               <p>{featured.excerpt}</p>
-              <a className="guide-read" href="#">Read the guide <I.external /></a>
+              <Link className="guide-read" href={`/guide/${featured.slug}`}>Read the guide <I.external /></Link>
               <div className="guide-meta">{featured.read_time}</div>
             </div>
           </article>
@@ -68,7 +68,7 @@ export default function Guides() {
                 <h3>{g.title}</h3>
                 <p>{g.excerpt}</p>
                 <div className="gc-foot">
-                  <a className="guide-read" href="#">Read guide <I.external /></a>
+                  <Link className="guide-read" href={`/guide/${g.slug}`}>Read guide <I.external /></Link>
                   <span className="read">{g.read_time}</span>
                 </div>
               </div>
