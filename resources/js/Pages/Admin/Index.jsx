@@ -1019,6 +1019,36 @@ function AnalyticsView({ analytics }) {
   );
 }
 
+function downloadAllProducts(products) {
+  const headers = [
+    'id', 'slug', 'name', 'brand', 'category', 'subcategory', 'price', 'retailer',
+    'affiliate_url', 'image', 'badge', 'rating', 'description',
+    'is_featured', 'is_resort', 'is_new', 'highlights', 'about', 'specs',
+  ];
+  const rows = products.map((p) => ({
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    brand: p.brand,
+    category: p.category,
+    subcategory: p.subcategory,
+    price: p.price,
+    retailer: p.retailer,
+    affiliate_url: p.affiliateUrl,
+    image: p.image,
+    badge: p.badge,
+    rating: p.rating,
+    description: p.description,
+    is_featured: p.is_featured ? 'TRUE' : 'FALSE',
+    is_resort: p.is_resort ? 'TRUE' : 'FALSE',
+    is_new: p.is_new ? 'TRUE' : 'FALSE',
+    highlights: (p.features || []).join('|'),
+    about: (p.detail?.about || []).join('|'),
+    specs: (p.detail?.specs || []).map(([k, v]) => `${k}:${v}`).join(';'),
+  }));
+  downloadCSV('products.csv', headers, rows);
+}
+
 // ── Products list ─────────────────────────────────────────────────────────────
 
 function ProductsView({ products, categories, onAdd, onEdit, onDelete, onToast }) {
@@ -1067,6 +1097,9 @@ function ProductsView({ products, categories, onAdd, onEdit, onDelete, onToast }
             importUrl="/admin/products/bulk-import"
             onToast={onToast}
           />
+          <button type="button" className="adm-btn adm-btn-ghost" onClick={() => downloadAllProducts(products)} disabled={products.length === 0}>
+            <I.download /> Download all
+          </button>
           <button className="adm-btn adm-btn-primary" onClick={onAdd}><I.plus /> Add product</button>
         </div>
       </div>
