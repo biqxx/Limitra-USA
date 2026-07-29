@@ -219,7 +219,7 @@ export default function VideosAdminView({ videos, productsLookup, onToast }) {
 
   const del = (id) => {
     router.delete('/admin/videos/' + id, {
-      preserveState: true, preserveScroll: true,
+      only: ['videos'], preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Video removed.')
     });
   };
@@ -227,12 +227,12 @@ export default function VideosAdminView({ videos, productsLookup, onToast }) {
   const save = (data, isEdit, id) => {
     if (isEdit) {
       router.put('/admin/videos/' + id, data, {
-        preserveState: true, preserveScroll: true,
+        only: ['videos'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Video saved.'); }
       });
     } else {
       router.post('/admin/videos', data, {
-        preserveState: true, preserveScroll: true,
+        only: ['videos'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Video saved.'); }
       });
     }

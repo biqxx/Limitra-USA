@@ -135,7 +135,7 @@ export default function JournalView({ articles, productsLookup, onToast }) {
   const del = (id) => {
     if (!confirm('Delete this article?')) return;
     router.delete('/admin/articles/' + id, {
-      preserveState: true, preserveScroll: true,
+      only: ['articles'], preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Article deleted.')
     });
   };
@@ -143,12 +143,12 @@ export default function JournalView({ articles, productsLookup, onToast }) {
   const save = (data, isEdit, id) => {
     if (isEdit) {
       router.put('/admin/articles/' + id, data, {
-        preserveState: true, preserveScroll: true,
+        only: ['articles'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Article saved.'); }
       });
     } else {
       router.post('/admin/articles', data, {
-        preserveState: true, preserveScroll: true,
+        only: ['articles'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Article saved.'); }
       });
     }

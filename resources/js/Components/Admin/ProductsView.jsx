@@ -264,13 +264,17 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
 
 const priceValue = (p) => parseFloat(String(p.price ?? '').replace(/[^0-9.]/g, '')) || 0;
 
+// 'products' is a lazy (optional) prop — a save/delete visit must explicitly
+// name it (and the eager dashboard stats it affects) or Inertia drops it from
+// the response entirely instead of refreshing it.
+const PRODUCTS_ONLY = ['products', 'productsCount', 'featuredCount', 'resortCount', 'linkedCount', 'recentProducts'];
+
 export default function ProductsView({ products, categories, productsLookup, onToast }) {
   const [editor, setEditor] = useState(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('All');
   const [sort, setSort] = useState(null);
   const [loading, setLoading] = useState(false);
-  const searchTimer = useRef(null);
 
   const reloadWith = (overrides = {}) => {
     const nextSort = overrides.sort !== undefined ? overrides.sort : sort;
@@ -292,11 +296,7 @@ export default function ProductsView({ products, categories, productsLookup, onT
     });
   };
 
-  const onSearchChange = (value) => {
-    setQ(value);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => reloadWith({ q: value, page: 1 }), 350);
-  };
+  const runSearch = () => reloadWith({ q, page: 1 });
 
   const onCatChange = (value) => {
     setCat(value);
@@ -311,12 +311,12 @@ export default function ProductsView({ products, categories, productsLookup, onT
   const saveProduct = (data, isEdit) => {
     if (isEdit) {
       router.put('/admin/products/' + data.id, data, {
-        preserveState: true, preserveScroll: true,
+        only: PRODUCTS_ONLY, preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Product updated.'); }
       });
     } else {
       router.post('/admin/products', data, {
-        preserveState: true, preserveScroll: true,
+        only: PRODUCTS_ONLY, preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Product added — live on storefront.'); }
       });
     }
@@ -325,7 +325,7 @@ export default function ProductsView({ products, categories, productsLookup, onT
   const deleteProduct = (p) => {
     if (!confirm(`Delete "${p.name}"? This removes it from the storefront.`)) return;
     router.delete('/admin/products/' + p.id, {
-      preserveState: true, preserveScroll: true,
+      only: PRODUCTS_ONLY, preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Product deleted.')
     });
   };
@@ -447,7 +447,16 @@ export default function ProductsView({ products, categories, productsLookup, onT
             }}
             toolbar={
               <>
-                <div className="adm-search"><I.search /><input placeholder="Search your products…" value={q} onChange={(e) => onSearchChange(e.target.value)} /></div>
+                <div className="adm-search">
+                  <I.search />
+                  <input
+                    placeholder="Search your products…"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') runSearch(); }}
+                  />
+                </div>
+                <button type="button" className="adm-btn adm-btn-ghost sm" onClick={runSearch}><I.search width="13" height="13" /> Search</button>
                 <select className="adm-select" value={cat} onChange={(e) => onCatChange(e.target.value)}>
                   {cats.map((c) => <option key={c}>{c}</option>)}
                 </select>

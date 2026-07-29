@@ -114,7 +114,7 @@ export default function StaticPagesAdminView({ staticPages, onToast }) {
   const del = (id) => {
     if (!confirm('Delete this page? Any links pointing to it will 404.')) return;
     router.delete('/admin/static-pages/' + id, {
-      preserveState: true, preserveScroll: true,
+      only: ['staticPages'], preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Page deleted.')
     });
   };
@@ -122,12 +122,12 @@ export default function StaticPagesAdminView({ staticPages, onToast }) {
   const save = (data, isEdit, id) => {
     if (isEdit) {
       router.put('/admin/static-pages/' + id, data, {
-        preserveState: true, preserveScroll: true,
+        only: ['staticPages'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Page saved.'); }
       });
     } else {
       router.post('/admin/static-pages', data, {
-        preserveState: true, preserveScroll: true,
+        only: ['staticPages'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Page saved.'); }
       });
     }

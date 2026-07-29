@@ -92,7 +92,7 @@ export default function SettingsView({ settings, onToast }) {
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const save = () => {
     router.put('/admin/settings', form, {
-      preserveState: true, preserveScroll: true,
+      only: ['settings'], preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Settings saved.')
     });
   };

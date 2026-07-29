@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { usePage, Deferred } from '@inertiajs/react';
+import { usePage, router } from '@inertiajs/react';
 import I from '../../Components/Icons';
 import Seo from '../../Components/Seo';
 import { AdmTabSkeleton, LogoutButton, useLookup } from '../../Components/Admin/AdminShared';
@@ -16,22 +16,43 @@ import OccasionsAdminView from '../../Components/Admin/OccasionsView';
 import SettingsView from '../../Components/Admin/SettingsView';
 import BulkImportsView from '../../Components/Admin/BulkImportsView';
 
+// Which Inertia prop each tab needs. These are lazy ("optional") props on the
+// server (see AdminController::index) — nothing is fetched for them on first
+// paint, and nothing auto-fetches them afterwards either. The first time the
+// admin opens a tab, goTo() below requests exactly that prop via a partial
+// reload; after that it's cached in page props and re-opening the tab is free.
+// 'dashboard' and 'categories' aren't listed here because their data is eager
+// (present on every page load) — they never need a fetch.
+const VIEW_PROPS = {
+  analytics: ['analytics'],
+  products: ['products'],
+  looks: ['looks'],
+  videos: ['videos'],
+  journal: ['articles'],
+  guides: ['guides'],
+  'static-pages': ['staticPages'],
+  occasions: ['occasions'],
+  'bulk-imports': ['bulkImports'],
+  settings: ['settings'],
+};
+
+// Tabs whose editor needs the full cross-catalog product picker/lookup —
+// fetched once, the first time any of these tabs is opened, then shared.
+const NEEDS_PRODUCTS_LOOKUP = new Set(['products', 'looks', 'videos', 'journal', 'guides', 'occasions']);
+
 export default function AdminIndex() {
   const { props } = usePage();
   const {
-    products, categories = [], occasions, articles, guides, staticPages, looks, videos, settings = {}, bulkImports, analytics = {},
+    products, categories = [], occasions, articles, guides, staticPages, looks, videos, settings, bulkImports, analytics,
     productsCount = 0, featuredCount = 0, resortCount = 0, linkedCount = 0, recentProducts = [], pendingImportsCount = 0,
   } = props;
 
   const [view, setView] = useState('dashboard');
+  const [loadedViews, setLoadedViews] = useState(() => new Set());
+  const [viewLoading, setViewLoading] = useState(false);
   const [toast, setToast] = useState(null);
-
-  // Every admin list is server-paginated now — pages only carry their own rows.
-  // Features that need to see the *entire* product catalog (the cross-editor
-  // product picker in Looks/Videos/Journal/Guides/Occasions, plus Products'
-  // own slug-uniqueness + bulk-import matching) share this one lightweight
-  // fetch instead of each view re-fetching its own copy.
-  const productsLookup = useLookup('/admin/products/lookup');
+  const [productsLookupNeeded, setProductsLookupNeeded] = useState(false);
+  const productsLookup = useLookup(productsLookupNeeded ? '/admin/products/lookup' : null);
 
   useEffect(() => {
     document.documentElement.dataset.palette = 'riviera';
@@ -40,6 +61,22 @@ export default function AdminIndex() {
   }, []);
 
   const admToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+
+  const goTo = (key) => {
+    setView(key);
+    if (NEEDS_PRODUCTS_LOOKUP.has(key)) setProductsLookupNeeded(true);
+    const only = VIEW_PROPS[key];
+    if (only && !loadedViews.has(key)) {
+      setViewLoading(true);
+      router.reload({
+        only,
+        preserveState: true,
+        preserveScroll: true,
+        onFinish: () => setViewLoading(false),
+        onSuccess: () => setLoadedViews((s) => new Set(s).add(key)),
+      });
+    }
+  };
 
   const nav = [
     { key: 'dashboard', label: 'Dashboard', icon: 'grid' },
@@ -72,7 +109,7 @@ export default function AdminIndex() {
           {nav.map((n) => {
             const Icon = I[n.icon];
             return (
-              <button key={n.key} className={'adm-nav' + (view === n.key ? ' active' : '')} onClick={() => setView(n.key)}>
+              <button key={n.key} className={'adm-nav' + (view === n.key ? ' active' : '')} onClick={() => goTo(n.key)}>
                 <Icon /> {n.label}
                 {n.badge != null && <span className="badge">{n.badge}</span>}
               </button>
@@ -85,63 +122,55 @@ export default function AdminIndex() {
           {view === 'dashboard' && (
             <Dashboard
               productsCount={productsCount} featuredCount={featuredCount} resortCount={resortCount} linkedCount={linkedCount}
-              recentProducts={recentProducts} onGo={setView}
+              recentProducts={recentProducts} onGo={goTo}
             />
           )}
           {view === 'analytics' && (
-            <Deferred data="analytics" fallback={<AdmTabSkeleton />}>
-              <AnalyticsView analytics={analytics} />
-            </Deferred>
+            loadedViews.has('analytics') ? <AnalyticsView analytics={analytics} /> : <AdmTabSkeleton />
           )}
           {view === 'products' && (
-            <Deferred data={['products', 'categories']} fallback={<AdmTabSkeleton />}>
-              <ProductsView products={products} categories={categories} productsLookup={productsLookup} onToast={admToast} />
-            </Deferred>
+            loadedViews.has('products')
+              ? <ProductsView products={products} categories={categories} productsLookup={productsLookup} onToast={admToast} />
+              : <AdmTabSkeleton />
           )}
           {view === 'categories' && (
-            <Deferred data="categories" fallback={<AdmTabSkeleton />}>
-              <CategoriesView categories={categories} onToast={admToast} />
-            </Deferred>
+            <CategoriesView categories={categories} onToast={admToast} />
           )}
           {view === 'looks' && (
-            <Deferred data="looks" fallback={<AdmTabSkeleton />}>
-              <LooksView looks={looks} productsLookup={productsLookup} onToast={admToast} />
-            </Deferred>
+            loadedViews.has('looks')
+              ? <LooksView looks={looks} productsLookup={productsLookup} onToast={admToast} />
+              : <AdmTabSkeleton />
           )}
           {view === 'videos' && (
-            <Deferred data="videos" fallback={<AdmTabSkeleton />}>
-              <VideosAdminView videos={videos} productsLookup={productsLookup} onToast={admToast} />
-            </Deferred>
+            loadedViews.has('videos')
+              ? <VideosAdminView videos={videos} productsLookup={productsLookup} onToast={admToast} />
+              : <AdmTabSkeleton />
           )}
           {view === 'journal' && (
-            <Deferred data="articles" fallback={<AdmTabSkeleton />}>
-              <JournalView articles={articles} productsLookup={productsLookup} onToast={admToast} />
-            </Deferred>
+            loadedViews.has('journal')
+              ? <JournalView articles={articles} productsLookup={productsLookup} onToast={admToast} />
+              : <AdmTabSkeleton />
           )}
           {view === 'guides' && (
-            <Deferred data="guides" fallback={<AdmTabSkeleton />}>
-              <GuidesAdminView guides={guides} productsLookup={productsLookup} onToast={admToast} />
-            </Deferred>
+            loadedViews.has('guides')
+              ? <GuidesAdminView guides={guides} productsLookup={productsLookup} onToast={admToast} />
+              : <AdmTabSkeleton />
           )}
           {view === 'static-pages' && (
-            <Deferred data="staticPages" fallback={<AdmTabSkeleton />}>
-              <StaticPagesAdminView staticPages={staticPages} onToast={admToast} />
-            </Deferred>
+            loadedViews.has('static-pages')
+              ? <StaticPagesAdminView staticPages={staticPages} onToast={admToast} />
+              : <AdmTabSkeleton />
           )}
           {view === 'occasions' && (
-            <Deferred data={['occasions', 'categories']} fallback={<AdmTabSkeleton />}>
-              <OccasionsAdminView occasions={occasions} categories={categories} productsLookup={productsLookup} onToast={admToast} />
-            </Deferred>
+            loadedViews.has('occasions')
+              ? <OccasionsAdminView occasions={occasions} categories={categories} productsLookup={productsLookup} onToast={admToast} />
+              : <AdmTabSkeleton />
           )}
           {view === 'bulk-imports' && (
-            <Deferred data="bulkImports" fallback={<AdmTabSkeleton />}>
-              <BulkImportsView batches={bulkImports} />
-            </Deferred>
+            loadedViews.has('bulk-imports') ? <BulkImportsView batches={bulkImports} /> : <AdmTabSkeleton />
           )}
           {view === 'settings' && (
-            <Deferred data="settings" fallback={<AdmTabSkeleton />}>
-              <SettingsView settings={settings} onToast={admToast} />
-            </Deferred>
+            loadedViews.has('settings') ? <SettingsView settings={settings} onToast={admToast} /> : <AdmTabSkeleton />
           )}
         </main>
       </div>

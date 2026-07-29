@@ -140,7 +140,7 @@ export default function LooksView({ looks, productsLookup, onToast }) {
   const del = (id) => {
     if (!confirm('Delete this look?')) return;
     router.delete('/admin/looks/' + id, {
-      preserveState: true, preserveScroll: true,
+      only: ['looks'], preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Look deleted.')
     });
   };
@@ -148,12 +148,12 @@ export default function LooksView({ looks, productsLookup, onToast }) {
   const save = (data, isEdit, id) => {
     if (isEdit) {
       router.put('/admin/looks/' + id, data, {
-        preserveState: true, preserveScroll: true,
+        only: ['looks'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Look updated.'); }
       });
     } else {
       router.post('/admin/looks', data, {
-        preserveState: true, preserveScroll: true,
+        only: ['looks'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Look added — live on storefront.'); }
       });
     }

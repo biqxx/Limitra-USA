@@ -74,7 +74,7 @@ export default function OccasionsAdminView({ occasions, categories, productsLook
   const del = (id) => {
     if (!confirm('Delete this occasion?')) return;
     router.delete('/admin/occasions/' + id, {
-      preserveState: true, preserveScroll: true,
+      only: ['occasions'], preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Occasion deleted.')
     });
   };
@@ -82,12 +82,12 @@ export default function OccasionsAdminView({ occasions, categories, productsLook
   const save = (data, isEdit, id) => {
     if (isEdit) {
       router.put('/admin/occasions/' + id, data, {
-        preserveState: true, preserveScroll: true,
+        only: ['occasions'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Occasion saved.'); }
       });
     } else {
       router.post('/admin/occasions', data, {
-        preserveState: true, preserveScroll: true,
+        only: ['occasions'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Occasion saved.'); }
       });
     }

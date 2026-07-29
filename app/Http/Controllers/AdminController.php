@@ -44,30 +44,36 @@ class AdminController extends Controller
             'recentProducts' => $recentProducts,
             'pendingImportsCount' => BulkImportBatch::where('status', 'processing')->count(),
 
-            // Deferred: fetched automatically in grouped background requests
-            // right after first paint, not blocking it. See AdminController
-            // notes / the Analytics plan for why this split exists.
+            // Small and shared by several tabs (Products' filter, Occasions' picker,
+            // Categories itself) — cheap enough to send on first paint so those tabs
+            // don't need an extra round trip just for this.
+            'categories' => $this->categoriesForAdmin(),
+
+            // Lazy: NOT fetched on first paint, and not auto-fetched afterwards either
+            // (unlike Inertia::defer). Each of these only resolves when the frontend
+            // explicitly requests it via a partial reload naming that prop — which
+            // Index.jsx does once, the first time the admin navigates to that tab.
+            // This keeps the initial admin load to just the Dashboard's eager stats
+            // above instead of shipping every section's data up front.
             //
-            // 'products' is now a server-paginated page (only the rows for the
+            // 'products' is a server-paginated page (only the rows for the
             // currently viewed table page — see productsForAdmin()), not the full
             // catalog. Anything that needs the *entire* catalog (the cross-editor
             // product picker, slug-uniqueness checks, bulk-import matching) fetches
             // the separate, lightweight GET /admin/products/lookup endpoint instead
             // — see productsLookup() — so those features keep seeing every product
             // without the main page needing to ship every product's full row.
-            'products' => Inertia::defer(fn () => $this->productsForAdmin($request), 'catalog'),
-            'categories' => Inertia::defer(fn () => $this->categoriesForAdmin(), 'catalog'),
-            'occasions' => Inertia::defer(fn () => $this->occasionsForAdmin($request), 'content'),
-            'articles' => Inertia::defer(fn () => $this->articlesForAdmin($request), 'content'),
-            'guides' => Inertia::defer(fn () => $this->guidesForAdmin($request), 'content'),
-            'staticPages' => Inertia::defer(fn () => $this->staticPagesForAdmin($request), 'content'),
-            'looks' => Inertia::defer(fn () => $this->looksForAdmin($request), 'content'),
-            'videos' => Inertia::defer(fn () => $this->videosForAdmin($request), 'content'),
-            'bulkImports' => Inertia::defer(fn () => $this->bulkImportsForAdmin($request), 'ops'),
-            'settings' => Inertia::defer(fn () => SiteSetting::allAsMap(), 'settings'),
-            'analytics' => Inertia::defer(
-                fn () => app(AnalyticsService::class)->summary((int) $request->integer('range', 30)),
-                'analytics'
+            'products' => Inertia::optional(fn () => $this->productsForAdmin($request)),
+            'occasions' => Inertia::optional(fn () => $this->occasionsForAdmin($request)),
+            'articles' => Inertia::optional(fn () => $this->articlesForAdmin($request)),
+            'guides' => Inertia::optional(fn () => $this->guidesForAdmin($request)),
+            'staticPages' => Inertia::optional(fn () => $this->staticPagesForAdmin($request)),
+            'looks' => Inertia::optional(fn () => $this->looksForAdmin($request)),
+            'videos' => Inertia::optional(fn () => $this->videosForAdmin($request)),
+            'bulkImports' => Inertia::optional(fn () => $this->bulkImportsForAdmin($request)),
+            'settings' => Inertia::optional(fn () => SiteSetting::allAsMap()),
+            'analytics' => Inertia::optional(
+                fn () => app(AnalyticsService::class)->summary((int) $request->integer('range', 30))
             ),
         ]);
     }

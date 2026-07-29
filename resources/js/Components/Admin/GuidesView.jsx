@@ -79,7 +79,7 @@ export default function GuidesAdminView({ guides, productsLookup, onToast }) {
   const del = (id) => {
     if (!confirm('Delete this guide?')) return;
     router.delete('/admin/guides/' + id, {
-      preserveState: true, preserveScroll: true,
+      only: ['guides'], preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Guide deleted.')
     });
   };
@@ -87,12 +87,12 @@ export default function GuidesAdminView({ guides, productsLookup, onToast }) {
   const save = (data, isEdit, id) => {
     if (isEdit) {
       router.put('/admin/guides/' + id, data, {
-        preserveState: true, preserveScroll: true,
+        only: ['guides'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Guide saved.'); }
       });
     } else {
       router.post('/admin/guides', data, {
-        preserveState: true, preserveScroll: true,
+        only: ['guides'], preserveState: true, preserveScroll: true,
         onSuccess: () => { setEditor(null); onToast('Guide saved.'); }
       });
     }

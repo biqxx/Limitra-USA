@@ -10,10 +10,16 @@ import I from '../Icons';
 // bulk-import "does this already exist?" matching) fetch one of the small
 // GET /admin/{resource}/lookup endpoints instead, via this hook.
 
-/** Fetches a lookup endpoint once on mount; returns [] until it resolves. */
+/**
+ * Fetches a lookup endpoint once on mount; returns [] until it resolves.
+ * Pass a falsy `url` (e.g. gated behind a "do we need this yet?" flag) to skip
+ * fetching entirely — useful for deferring a shared lookup until the first
+ * tab that actually needs it is opened.
+ */
 export function useLookup(url) {
   const [data, setData] = useState([]);
   useEffect(() => {
+    if (!url) return;
     let cancelled = false;
     fetch(url, { headers: { Accept: 'application/json' } })
       .then((r) => r.json())
