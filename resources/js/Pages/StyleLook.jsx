@@ -30,9 +30,11 @@ function ConfigGridMosaic({ items, productsMap }) {
         const p = item.id ? productsMap[item.id] : null;
         const Tag = p ? Link : "div";
         const image = item.image || p?.image;
+        const colSpan = item.col_span || item.colSpan || 1;
+        const rowSpan = item.row_span || item.rowSpan || 1;
         return (
           <Tag key={i} className="stl-prod" {...(p ? { href: `/product/${p.slug || p.id}` } : {})}
-            style={{ gridColumn: `span ${item.col_span || item.colSpan || 1}`, gridRow: `span ${item.row_span || item.rowSpan || 1}` }}>
+            style={{ gridColumn: `span ${colSpan}`, gridRow: `span ${rowSpan}`, aspectRatio: `${colSpan} / ${rowSpan}` }}>
             <div className="stl-prod-img">
               {image && <img src={image} alt={p?.name || ""} loading="lazy" />}
             </div>
