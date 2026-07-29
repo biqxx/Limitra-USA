@@ -3,7 +3,7 @@ import { router } from '@inertiajs/react';
 import I from '../Icons';
 import { ImgInput, useUploadBusy } from './AdminShared';
 
-function CatEditor({ cat, onSave }) {
+function CatEditor({ cat, onCancel, onSave }) {
   const [img, setImg] = useState(cat.img || '');
   const [fi1, setFi1] = useState(cat.featureImg || '');
   const [fi2, setFi2] = useState(cat.featureImg2 || '');
@@ -15,7 +15,7 @@ function CatEditor({ cat, onSave }) {
   const remSub = (i) => setSubs(subs.filter((_, j) => j !== i));
   const moveSub = (i, d) => { const n = [...subs]; [n[i], n[i + d]] = [n[i + d], n[i]]; setSubs(n); };
   return (
-    <div style={{ borderTop: '1px solid var(--line)', paddingTop: 16, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className="adm-form">
       <ImgInput label="Homepage tile image" value={img} onChange={setImg} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       <ImgInput label="Feature image 1 (mega-menu left)" value={fi1} onChange={setFi1} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       <ImgInput label="Feature image 2 (mega-menu right)" value={fi2} onChange={setFi2} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
@@ -37,15 +37,26 @@ function CatEditor({ cat, onSave }) {
           </div>
         </div>
       </div>
-      <button type="button" className="adm-btn adm-btn-primary" onClick={() => onSave({ img, featureImg: fi1, featureImg2: fi2, bannerImg: ban, subs })} disabled={imgBusy}>
-        <I.check /> Save category
-      </button>
+      <div className="adm-form-foot">
+        <span className="spacer"></span>
+        <button type="button" className="adm-btn adm-btn-ghost" onClick={onCancel}>Cancel</button>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={() => onSave({ img, featureImg: fi1, featureImg2: fi2, bannerImg: ban, subs })} disabled={imgBusy}>
+          <I.check /> Save category
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function CategoriesView({ categories, onToast }) {
-  const [active, setActive] = useState(null);
+  const [editor, setEditor] = useState(null);
+
+  const save = (patch) => {
+    router.put('/admin/categories/' + editor.id, patch, {
+      preserveState: true, preserveScroll: true,
+      onSuccess: () => { setEditor(null); onToast('Category updated.'); }
+    });
+  };
 
   return (
     <>
@@ -58,11 +69,11 @@ export default function CategoriesView({ categories, onToast }) {
                 <div style={{ fontWeight: 700, color: 'var(--brand)', fontFamily: 'var(--font-display)', fontSize: 18 }}>{c.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>{c.subs.length} subcategories</div>
               </div>
-              <button className="adm-btn adm-btn-ghost sm" onClick={() => setActive(active === c.name ? null : c.name)}>
-                {active === c.name ? 'Close' : 'Edit'} <I.edit />
+              <button className="adm-btn adm-btn-ghost sm" onClick={() => setEditor(c)}>
+                Edit <I.edit />
               </button>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {[['Homepage tile', c.img], ['Feature 1', c.featureImg], ['Feature 2', c.featureImg2], ['Banner', c.bannerImg]].map(([lab, src]) => (
                 <div key={lab} style={{ textAlign: 'center' }}>
                   <div style={{ width: 52, height: 52, borderRadius: 7, overflow: 'hidden', background: 'var(--card)', border: '1px solid var(--line)' }}>
@@ -72,17 +83,23 @@ export default function CategoriesView({ categories, onToast }) {
                 </div>
               ))}
             </div>
-            {active === c.name && (
-              <CatEditor cat={c} onSave={(patch) => {
-                router.put('/admin/categories/' + c.id, patch, {
-                  preserveState: true, preserveScroll: true,
-                  onSuccess: () => { setActive(null); onToast('Category updated.'); }
-                });
-              }} />
-            )}
           </div>
         ))}
       </div>
+
+      {editor && (
+        <div className="adm-overlay" onMouseDown={() => setEditor(null)}>
+          <div className="adm-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="adm-modal-head">
+              <h2>Edit {editor.name}</h2>
+              <button className="adm-close" onClick={() => setEditor(null)} aria-label="Close"><I.close /></button>
+            </div>
+            <div className="adm-modal-body">
+              <CatEditor cat={editor} onCancel={() => setEditor(null)} onSave={save} />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
