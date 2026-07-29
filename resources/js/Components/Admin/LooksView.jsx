@@ -17,7 +17,7 @@ function GridBuilder({ items, onChange, products }) {
   const move = (i, d) => { const n = [...items]; [n[i], n[i + d]] = [n[i + d], n[i]]; onChange(n); };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 20, alignItems: 'start' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Grid items</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -58,9 +58,9 @@ function GridBuilder({ items, onChange, products }) {
           <button type="button" className="adm-add-row" onClick={add}><I.plus width="14" height="14" /> Add item</button>
         </div>
       </div>
-      <div style={{ position: 'sticky', top: 80 }}>
+      <div>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Live preview</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2, background: '#ddd5cc', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--line)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2, background: '#ddd5cc', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--line)', maxWidth: 420 }}>
           {items.length === 0 && <div style={{ gridColumn: 'span 2', padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--muted)', background: 'var(--surface)' }}>Add items above</div>}
           {items.map((item, i) => {
             const p = item.id ? lookup[item.id] : null;

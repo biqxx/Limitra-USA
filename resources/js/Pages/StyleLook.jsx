@@ -25,28 +25,28 @@ function StlProd({ p, hero }) {
 
 function ConfigGridMosaic({ items, productsMap }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "1.5px", background: "#ddd5cc", borderLeft: "1.5px solid #ddd5cc" }}>
+    <div className="stl-mosaic">
       {items.map((item, i) => {
         const p = item.id ? productsMap[item.id] : null;
+        const Tag = p ? Link : "div";
+        const image = item.image || p?.image;
         return (
-          <Link key={i} className="stl-prod" href={p ? `/product/${p.slug || p.id}` : "#"}
+          <Tag key={i} className="stl-prod" {...(p ? { href: `/product/${p.slug || p.id}` } : {})}
             style={{ gridColumn: `span ${item.col_span || item.colSpan || 1}`, gridRow: `span ${item.row_span || item.rowSpan || 1}` }}>
-            <div className="stl-prod-img" style={{ flex: 1 }}>
-              {item.image
-                ? <img src={item.image} alt="" loading="lazy" />
-                : p?.image
-                  ? <img src={p.image} alt={p.name} loading="lazy" />
-                  : null}
+            <div className="stl-prod-img">
+              {image && <img src={image} alt={p?.name || ""} loading="lazy" />}
             </div>
             {p && (
-              <div className="stl-prod-info">
-                <span className="stl-brand-name">{p.brand}</span>
-                <span className="stl-prod-name">{p.name}</span>
-                <span className="stl-prod-price">{p.price}</span>
-              </div>
+              <>
+                <div className="stl-prod-info">
+                  <span className="stl-brand-name">{p.brand}</span>
+                  <span className="stl-prod-name">{p.name}</span>
+                  <span className="stl-prod-price">{p.price}</span>
+                </div>
+                <div className="stl-view-link"><span>Buy Now →</span></div>
+              </>
             )}
-            <div className="stl-view-link"><span>Buy Now →</span></div>
-          </Link>
+          </Tag>
         );
       })}
     </div>
