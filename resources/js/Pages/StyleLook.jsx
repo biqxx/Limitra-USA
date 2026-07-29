@@ -6,10 +6,10 @@ import I from '../Components/Icons';
 import { SavedDrawer } from '../Components/ProductCard';
 import useSaved from '../hooks/useSaved';
 
-function StlProd({ p, hero }) {
-  if (!p) return <div className={"stl-prod" + (hero ? " hero" : "")}></div>;
+function StlProd({ p }) {
+  if (!p) return <div className="stl-prod"></div>;
   return (
-    <Link className={"stl-prod" + (hero ? " hero" : "")} href={`/product/${p.slug || p.id}`}>
+    <Link className="stl-prod" href={`/product/${p.slug || p.id}`}>
       <div className="stl-prod-img">
         {p.image && <img src={p.image} alt={p.name} loading="lazy" />}
       </div>
@@ -62,12 +62,7 @@ function LookMosaic({ look, productsMap }) {
   const prods = (look.product_ids || []).map((id) => productsMap[id] || null);
   return (
     <div className="stl-mosaic">
-      <StlProd p={prods[0]} hero />
-      <StlProd p={prods[1]} />
-      <div className="stl-subpair"><StlProd p={prods[2]} /><StlProd p={prods[3]} /></div>
-      <StlProd p={prods[4]} /><StlProd p={prods[5]} />
-      {prods[6] && <StlProd p={prods[6]} />}
-      {prods[7] && <StlProd p={prods[7]} />}
+      {prods.map((p, i) => <StlProd key={p?.id ?? i} p={p} />)}
     </div>
   );
 }
