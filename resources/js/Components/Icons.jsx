@@ -87,6 +87,13 @@ const I = {
   chart: (p) => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M4 20V10M11 20V4M18 20v-7"/></svg>),
   trendUp: (p) => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>),
   trendDown: (p) => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M3 7l6 6 4-4 8 8"/><path d="M15 17h6v-6"/></svg>),
+  chevronLeft: (p) => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M15 5l-7 7 7 7"/></svg>),
+  chevronRight: (p) => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M9 5l7 7-7 7"/></svg>),
+  chevronsLeft: (p) => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M17 5l-7 7 7 7M10 5l-7 7 7 7"/></svg>),
+  chevronsRight: (p) => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M7 5l7 7-7 7M14 5l7 7-7 7"/></svg>),
+  sortUp: (p) => (<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" {...p}><path d="M12 5l7 8H5l7-8Z"/></svg>),
+  sortDown: (p) => (<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" {...p}><path d="M12 19l-7-8h14l-7 8Z"/></svg>),
+  sortNone: (p) => (<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" opacity=".35" {...p}><path d="M12 4l5 6H7l5-6Zm0 16l-5-6h10l-5 6Z"/></svg>),
 };
 
 export default I;

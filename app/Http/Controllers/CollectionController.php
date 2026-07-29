@@ -18,7 +18,11 @@ class CollectionController extends Controller
             'gifts' => Product::with(['category', 'subcategory'])->get(),
             default => Product::where(function ($q) use ($type) {
                 $occasion = Occasion::where('key', $type)->first();
-                if ($occasion && $occasion->subcats) {
+                if ($occasion && $occasion->product_ids) {
+                    // Explicit per-product curation from the admin editor — takes priority.
+                    $q->whereIn('id', $occasion->product_ids);
+                } elseif ($occasion && $occasion->subcats) {
+                    // Legacy/bulk curation by subcategory, kept for occasions configured this way.
                     $q->whereHas('subcategory', fn ($sq) => $sq->whereIn('name', $occasion->subcats));
                 }
             })->with(['category', 'subcategory'])->get(),

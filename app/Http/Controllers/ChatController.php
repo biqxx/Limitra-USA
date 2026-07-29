@@ -360,6 +360,59 @@ class ChatController extends Controller
         ), fn ($t) => $t !== ''));
     }
 
+    /** Flattens whichever of text/name/description terms were provided into one deduped list, for relevance scoring. */
+    private function collectSearchTerms(array $search): array
+    {
+        return array_values(array_unique(array_merge(
+            $this->normalizeTerms($search['text'] ?? null),
+            $this->normalizeTerms($search['name'] ?? null),
+            $this->normalizeTerms($search['description'] ?? null),
+        )));
+    }
+
+    /**
+     * Scores how well a product matches the request — used to rank the SQL candidate pool
+     * so the AI is handed the best matches, not just whichever rows the query returned
+     * first. A name match counts far more than a description mention; an exact/leading
+     * match counts more than a mid-string one.
+     */
+    private function relevanceScore(Product $p, array $terms, array $brandTerms): float
+    {
+        $score = 0.0;
+        $name  = mb_strtolower($p->name ?? '');
+        $desc  = mb_strtolower($p->description ?? '');
+        $brand = mb_strtolower($p->brand ?? '');
+
+        foreach ($terms as $term) {
+            $t = mb_strtolower(trim($term));
+            if ($t === '') continue;
+
+            if ($name === $t) {
+                $score += 100;
+            } elseif (str_starts_with($name, $t)) {
+                $score += 60;
+            } elseif (str_contains($name, $t)) {
+                $score += 30;
+            }
+
+            if (str_contains($desc, $t)) {
+                $score += 5;
+            }
+        }
+
+        foreach ($brandTerms as $term) {
+            $t = mb_strtolower(trim($term));
+            if ($t !== '' && str_contains($brand, $t)) {
+                $score += 40;
+            }
+        }
+
+        // Tie-breaker only — never enough to outrank a genuine text/brand match above.
+        if ($p->is_featured) $score += 1;
+
+        return $score;
+    }
+
     /** Searches name OR description for ANY of the given terms — the common case for product type lookups */
     private function filterByText(Builder $query, array $terms): void
     {
@@ -461,7 +514,11 @@ class ChatController extends Controller
         }
 
         try {
-            $products = $query->limit(15)->get();
+            // Broader-than-final candidate pool — the WHERE clause above already narrows
+            // to plausible matches, but doesn't rank them by relevance. Fetching more than
+            // the final 15 gives the scoring below real matches to choose from instead of
+            // just whatever the database's default (arbitrary) row order happens to return.
+            $candidates = $query->limit(200)->get();
         } catch (\Throwable $e) {
             Log::error('[Chat] Product query failed', [
                 'error' => $e->getMessage(),
@@ -471,11 +528,21 @@ class ChatController extends Controller
             return ['products' => [], 'map' => []];
         }
 
-        Log::info('[Chat] Query returned ' . $products->count() . ' product(s)', [
+        if ($candidates->isEmpty()) return ['products' => [], 'map' => []];
+
+        // Rank candidates by how closely they actually match the request, then keep only
+        // the best 15 — not just the first 15 the query happened to return.
+        $terms      = $this->collectSearchTerms($search);
+        $brandTerms = $this->normalizeTerms($search['brand'] ?? null);
+
+        $products = $candidates
+            ->sortByDesc(fn ($p) => $this->relevanceScore($p, $terms, $brandTerms))
+            ->take(15)
+            ->values();
+
+        Log::info('[Chat] Query returned ' . $candidates->count() . ' candidate(s), kept top ' . $products->count(), [
             'ids' => $products->pluck('id')->all(),
         ]);
-
-        if ($products->isEmpty()) return ['products' => [], 'map' => []];
 
         // Give the AI a short token instead of the real UUID — LLMs reliably reproduce
         // "p1" inline but frequently mistype long random UUIDs, breaking the <product:ID>

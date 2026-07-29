@@ -41,6 +41,10 @@ return [
 
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
+        // Explicit context caching for the (large, static) chat system prompts — pure cost/
+        // latency optimization. Safe to disable if it ever misbehaves; the provider falls
+        // back to sending the system prompt inline exactly as before.
+        'context_caching' => env('GEMINI_CONTEXT_CACHING', true),
     ],
 
     'ai' => [

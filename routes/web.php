@@ -102,4 +102,17 @@ Route::middleware('admin')->group(function () {
     Route::post('/admin/conversions/bulk-import', [AdminController::class, 'bulkImportConversions'])->name('admin.conversions.bulk');
 
     Route::put('/admin/settings', [AdminController::class, 'updateSettings'])->name('admin.settings.update');
+
+    // Lightweight, unpaginated lookups — every row, but only the fields needed for
+    // the cross-editor product picker, slug/key-uniqueness checks, and bulk-import
+    // "does this already exist?" matching. Kept separate from the main paginated
+    // table props so those props can stay small.
+    Route::get('/admin/products/lookup', [AdminController::class, 'productsLookup'])->name('admin.products.lookup');
+    Route::get('/admin/products/export', [AdminController::class, 'exportProducts'])->name('admin.products.export');
+    Route::get('/admin/occasions/lookup', [AdminController::class, 'occasionsLookup'])->name('admin.occasions.lookup');
+    Route::get('/admin/articles/lookup', [AdminController::class, 'articlesLookup'])->name('admin.articles.lookup');
+    Route::get('/admin/guides/lookup', [AdminController::class, 'guidesLookup'])->name('admin.guides.lookup');
+    Route::get('/admin/static-pages/lookup', [AdminController::class, 'staticPagesLookup'])->name('admin.static-pages.lookup');
+    Route::get('/admin/looks/lookup', [AdminController::class, 'looksLookup'])->name('admin.looks.lookup');
+    Route::get('/admin/videos/lookup', [AdminController::class, 'videosLookup'])->name('admin.videos.lookup');
 });
