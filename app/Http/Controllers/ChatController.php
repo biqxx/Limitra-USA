@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Article;
 use App\Models\Product;
 use App\Models\SiteSetting;
 use App\Services\AiProvider;
@@ -81,7 +82,7 @@ class ChatController extends Controller
             'failed'         => $scan['failed'],
         ]);
 
-        $useDirectReply = !$scan['needs_products'] && !$scan['failed'] && filled($scan['direct_reply']);
+        $useDirectReply = !$scan['needs_products'] && !$scan['needs_journals'] && !$scan['failed'] && filled($scan['direct_reply']);
 
         if ($useDirectReply) {
             Log::info('[Chat] Step 2 — skipped (scanning phase answered directly)');
@@ -119,7 +120,22 @@ class ChatController extends Controller
             Log::info('[Chat] Step 2 — skipped (no product search needed)');
         }
 
-        $system = $this->buildSystemPrompt(! empty($products));
+        // Step 2b: Journal (article) search — same "search now, ground on results" shape
+        // as products, so Elo can point customers to an existing Limitra Journal guide
+        // instead of only ever recommending products.
+        $journals = [];
+        $journalTokenMap = [];
+        if ($scan['needs_journals'] && ! empty($scan['journal_search'])) {
+            Log::info('[Chat] Step 2b — searching journals', ['search' => $scan['journal_search']]);
+            $jresult = $this->searchJournals($scan['journal_search']);
+            $journals = $jresult['journals'];
+            $journalTokenMap = $jresult['map'];
+            Log::info('[Chat] Journal search complete', ['journals_found' => count($journals)]);
+        } else {
+            Log::info('[Chat] Step 2b — skipped (no journal search needed)');
+        }
+
+        $system = $this->buildSystemPrompt(! empty($products), ! empty($journals));
 
         // Ground the model on exactly what's being asked and exactly what it may
         // recommend from — the last user turn's content becomes a single structured
@@ -136,29 +152,38 @@ class ChatController extends Controller
                 'system'   => 'Answer only what the "user" field asks. Use ONLY the products listed in "products" '
                     . '(if any) — never reference, describe, or imply any product, brand, or item that is not in '
                     . 'that array, even if you recognize it from general knowledge. If "products" is empty, do not '
-                    . 'name or imply any specific product.',
+                    . 'name or imply any specific product. Use ONLY the articles listed in "journals" (if any) when '
+                    . 'recommending a Limitra Journal guide — never invent or imply the existence of an article that '
+                    . 'is not in that array.',
                 'products' => $products,
+                'journals' => $journals,
             ], JSON_UNESCAPED_UNICODE),
         ];
 
         Log::info('[Chat] Step 3 — starting stream');
 
-        return response()->stream(function () use ($provider, $system, $groundedMessages, $tokenMap, $user) {
+        return response()->stream(function () use ($provider, $system, $groundedMessages, $tokenMap, $journalTokenMap, $user) {
             while (ob_get_level() > 0) ob_end_flush();
 
-            // Buffers a possible partial "<product:..." tag across chunk boundaries, then
-            // substitutes the short token the AI used (e.g. "p1") for the real product ID
-            // before the chunk reaches the browser — see substituteProductTokens().
+            // Buffers a possible partial "<product:...>" tag or "[label](journal:...)" link
+            // across chunk boundaries, then substitutes the short token the AI used (e.g.
+            // "p1"/"j1") for the real product ID / article URL before the chunk reaches the
+            // browser — see substituteProductTokens() / substituteJournalTokens().
             $tagBuffer = '';
             $fullReply = '';
-            $flushChunk = function (string $text) use (&$tagBuffer, &$fullReply, $tokenMap) {
+            $flushChunk = function (string $text) use (&$tagBuffer, &$fullReply, $tokenMap, $journalTokenMap) {
                 $tagBuffer .= $text;
 
-                $lastLt = strrpos($tagBuffer, '<');
-                if ($lastLt !== false) {
-                    $tail = substr($tagBuffer, $lastLt);
-                    if (strpos($tail, '>') === false && preg_match('/^<[a-z0-9_:-]*$/i', $tail) && strlen($tail) <= 40) {
-                        $safe      = substr($tagBuffer, 0, $lastLt);
+                // Hold back from the latest unclosed "<" or "[" — it might be an in-progress
+                // <product:...> tag or [label](journal:...) link split across two stream
+                // chunks. The length cap is a safety valve so a literal stray "<"/"[" in
+                // prose (that never closes) doesn't get held back forever.
+                $lastMarker = max(strrpos($tagBuffer, '<') ?: -1, strrpos($tagBuffer, '[') ?: -1);
+                if ($lastMarker !== -1) {
+                    $tail = substr($tagBuffer, $lastMarker);
+                    $hasTerminator = str_contains($tail, '>') || str_contains($tail, ')');
+                    if (!$hasTerminator && strlen($tail) <= 200) {
+                        $safe      = substr($tagBuffer, 0, $lastMarker);
                         $tagBuffer = $tail;
                     } else {
                         $safe      = $tagBuffer;
@@ -171,6 +196,7 @@ class ChatController extends Controller
 
                 if ($safe !== '') {
                     $safe = $this->substituteProductTokens($safe, $tokenMap);
+                    $safe = $this->substituteJournalTokens($safe, $journalTokenMap);
                     $fullReply .= $safe;
                     echo 'data: ' . json_encode(['text' => $safe]) . "\n\n";
                     flush();
@@ -182,6 +208,7 @@ class ChatController extends Controller
 
                 if ($tagBuffer !== '') {
                     $tail = $this->substituteProductTokens($tagBuffer, $tokenMap);
+                    $tail = $this->substituteJournalTokens($tail, $journalTokenMap);
                     $fullReply .= $tail;
                     echo 'data: ' . json_encode(['text' => $tail]) . "\n\n";
                     flush();
@@ -255,14 +282,19 @@ class ChatController extends Controller
     // ── Scanning phase ────────────────────────────────────────────────────────
 
     /**
-     * Classifies intent/safety and, when no product search is needed, composes the
-     * entire customer-facing reply itself — letting the app skip the execution call
+     * Classifies intent/safety and, when no product or journal search is needed, composes
+     * the entire customer-facing reply itself — letting the app skip the execution call
      * for that common case. Returns:
-     *   needs_products: bool, search: array|null, safe: bool, direct_reply: string|null, failed: bool
+     *   needs_products: bool, search: array|null, needs_journals: bool, journal_search: array|null,
+     *   safe: bool, direct_reply: string|null, failed: bool
      */
     private function scanIntent(AiProvider $provider, array $messages): array
     {
-        $default = ['needs_products' => false, 'search' => null, 'safe' => true, 'direct_reply' => null, 'failed' => false];
+        $default = [
+            'needs_products' => false, 'search' => null,
+            'needs_journals' => false, 'journal_search' => null,
+            'safe' => true, 'direct_reply' => null, 'failed' => false,
+        ];
 
         try {
             $system = $this->resolvePlaceholders(require resource_path('prompts/elo-scanning-prompt.php'));
@@ -301,6 +333,8 @@ class ChatController extends Controller
             return [
                 'needs_products' => (bool) ($data['needs_products'] ?? false),
                 'search'         => $data['search'] ?? null,
+                'needs_journals' => (bool) ($data['needs_journals'] ?? false),
+                'journal_search' => $data['journal_search'] ?? null,
                 'safe'           => $safe,
                 'direct_reply'   => $data['direct_reply'] ?? null,
                 'failed'         => false,
@@ -310,7 +344,11 @@ class ChatController extends Controller
                 'error' => $e->getMessage(),
                 'file'  => $e->getFile() . ':' . $e->getLine(),
             ]);
-            return ['needs_products' => false, 'search' => null, 'safe' => true, 'direct_reply' => null, 'failed' => true];
+            return [
+                'needs_products' => false, 'search' => null,
+                'needs_journals' => false, 'journal_search' => null,
+                'safe' => true, 'direct_reply' => null, 'failed' => true,
+            ];
         }
     }
 
@@ -581,6 +619,107 @@ class ChatController extends Controller
         }, $text);
     }
 
+    // ── Journal (article) search orchestrator ─────────────────────────────────
+
+    /**
+     * Same shape as searchProducts(): scores candidates by relevance and returns a short
+     * per-token map so the AI can reliably reproduce "j1" instead of a real slug inline.
+     *
+     * @return array{journals: array, map: array<string,string>}
+     */
+    private function searchJournals(array $search): array
+    {
+        $query = Article::query();
+
+        $terms = $this->normalizeTerms($search['text'] ?? null);
+        if (! empty($terms)) {
+            $query->where(function ($q) use ($terms) {
+                foreach ($terms as $term) {
+                    $q->orWhere('title', 'like', "%{$term}%")
+                        ->orWhere('excerpt', 'like', "%{$term}%");
+                }
+            });
+        }
+
+        $tagTerms = $this->normalizeTerms($search['tag'] ?? null);
+        if (! empty($tagTerms)) {
+            $query->where(function ($q) use ($tagTerms) {
+                foreach ($tagTerms as $term) {
+                    $q->orWhere('tag', 'like', "%{$term}%");
+                }
+            });
+        }
+
+        try {
+            $candidates = $query->limit(100)->get();
+        } catch (\Throwable $e) {
+            Log::error('[Chat] Journal query failed', [
+                'error' => $e->getMessage(),
+                'sql'   => $query->toSql(),
+                'file'  => $e->getFile() . ':' . $e->getLine(),
+            ]);
+            return ['journals' => [], 'map' => []];
+        }
+
+        if ($candidates->isEmpty()) return ['journals' => [], 'map' => []];
+
+        $journals = $candidates
+            ->sortByDesc(function ($a) use ($terms) {
+                $score = 0.0;
+                $title = mb_strtolower($a->title ?? '');
+                $excerpt = mb_strtolower($a->excerpt ?? '');
+
+                foreach ($terms as $term) {
+                    $t = mb_strtolower(trim($term));
+                    if ($t === '') continue;
+
+                    if ($title === $t) $score += 100;
+                    elseif (str_starts_with($title, $t)) $score += 60;
+                    elseif (str_contains($title, $t)) $score += 30;
+
+                    if (str_contains($excerpt, $t)) $score += 5;
+                }
+
+                if ($a->featured) $score += 1;
+
+                return $score;
+            })
+            ->take(5)
+            ->values();
+
+        Log::info('[Chat] Journal query returned ' . $candidates->count() . ' candidate(s), kept top ' . $journals->count(), [
+            'slugs' => $journals->pluck('slug')->all(),
+        ]);
+
+        // Token maps to the real slug (not an ID) — substituteJournalTokens() turns the
+        // AI's "journal:j1" into the actual "/article/{slug}" URL server-side, so the
+        // frontend just needs to render a normal markdown-style link, no lookup required.
+        $map = [];
+        $structured = $journals->map(function ($a, $i) use (&$map) {
+            $token = 'j' . ($i + 1);
+            $map[$token] = $a->slug;
+
+            return [
+                'id'      => $token,
+                'title'   => $a->title,
+                'tag'     => $a->tag,
+                'excerpt' => $a->excerpt,
+            ];
+        })->values()->toArray();
+
+        return ['journals' => $structured, 'map' => $map];
+    }
+
+    /** Replaces AI-written "(journal:TOKEN)" markdown-link targets with the real article URL. */
+    private function substituteJournalTokens(string $text, array $tokenMap): string
+    {
+        if (empty($tokenMap)) return $text;
+
+        return preg_replace_callback('/\(journal:([a-z0-9_-]+)\)/i', function ($m) use ($tokenMap) {
+            return isset($tokenMap[$m[1]]) ? '(/article/' . $tokenMap[$m[1]] . ')' : $m[0];
+        }, $text);
+    }
+
     /** Resolves the {{...}} placeholders shared by the scanning and execution prompts. */
     private function resolvePlaceholders(string $text): string
     {
@@ -598,14 +737,14 @@ class ChatController extends Controller
 
     // ── System prompt ─────────────────────────────────────────────────────────
 
-    private function buildSystemPrompt(bool $hasProducts): string
+    private function buildSystemPrompt(bool $hasProducts, bool $hasJournals = false): string
     {
         $formatSection = <<<SECTION
 MESSAGE FORMAT
 
 The customer's current message does not arrive as plain text. It arrives as the next user turn,
 formatted as a single JSON object with exactly these fields:
-  {"user": "<the customer's literal message, verbatim>", "system": "<a short reinforcement of the grounding rules below>", "products": [ ... ]}
+  {"user": "<the customer's literal message, verbatim>", "system": "<a short reinforcement of the grounding rules below>", "products": [ ... ], "journals": [ ... ]}
 
 Read "user" as the only thing the customer actually said this turn — answer that, specifically,
 not a generalization of it. Prior turns in the conversation are still plain text and are
@@ -645,9 +784,38 @@ SECTION;
                 . 'to recommend from yet. Do not embed any product tags.';
         }
 
+        if ($hasJournals) {
+            $journalSection = <<<SECTION
+"journals" is a non-empty array of Limitra Journal articles, each shaped:
+  {"id": "j1", "title": "...", "tag": "...", "excerpt": "..."}
+
+These were already searched and matched for this customer's request. When one of them
+genuinely helps answer the question (a styling/editorial guide, a "how to" topic, seasonal
+or trend content), recommend it naturally in your reply.
+
+STRICT GROUNDING RULES:
+- Only reference articles that appear in "journals". Never name, describe, or imply the
+  existence of any other article that is not in that array.
+- Only use the fields given for each article (title, tag, excerpt). Never invent additional
+  claims about an article's content beyond its excerpt.
+
+When you mention an article, write its title as a markdown link with the exact token from its
+"id" field (e.g. "j1") as the link target, in this exact form:
+  [Article title](journal:TOKEN)
+Example:
+  "Our guide on [Building a Capsule Wardrobe](journal:j1) walks through exactly that."
+Do not invent or modify the token. This is separate from product tags — an article
+recommendation is never wrapped in a <product:...> tag.
+SECTION;
+        } else {
+            $journalSection = '"journals" is an empty array — no Limitra Journal article matched this query. Do not '
+                . 'name, describe, or imply the existence of any article, and do not write a "[title](journal:...)" '
+                . 'link.';
+        }
+
         static $base = null;
         $base ??= require resource_path('prompts/elo-system-prompt.php');
 
-        return $this->resolvePlaceholders($base) . "\n\n" . $formatSection . "\n\n" . $productSection;
+        return $this->resolvePlaceholders($base) . "\n\n" . $formatSection . "\n\n" . $productSection . "\n\n" . $journalSection;
     }
 }

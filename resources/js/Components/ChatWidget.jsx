@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { usePage } from '@inertiajs/react';
+import { usePage, Link } from '@inertiajs/react';
 import I from './Icons';
 
 const CHAT_STORAGE = "limitra.chat.history.v1";
@@ -11,13 +11,20 @@ function safeContent(text) {
   return text.replace(/<product:[^>]*$/i, '');
 }
 
-// Renders "**bold**" segments within a line of plain text. An unmatched trailing "**"
-// (mid-stream, before its closing marker has arrived yet) is left as literal text — it
-// resolves itself once the rest of the pair streams in on a later re-render.
+// Renders "**bold**" and "[Journal title](/article/slug)" segments within a line of plain
+// text — the latter is how the AI recommends a Limitra Journal article: an underlined,
+// clickable title inline in the sentence, rather than a separate card like products get.
+// An unmatched trailing "**"/"[...]" (mid-stream, before its closing marker has arrived
+// yet) is left as literal text — it resolves itself once the rest streams in.
 function renderInline(text, keyPrefix) {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((seg, i) => {
-    const m = seg.match(/^\*\*([^*]+)\*\*$/);
-    return m ? <strong key={`${keyPrefix}-b${i}`}>{m[1]}</strong> : seg;
+  return text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\(\/article\/[a-z0-9-]+\))/gi).map((seg, i) => {
+    const bold = seg.match(/^\*\*([^*]+)\*\*$/);
+    if (bold) return <strong key={`${keyPrefix}-b${i}`}>{bold[1]}</strong>;
+
+    const link = seg.match(/^\[([^\]]+)\]\((\/article\/[a-z0-9-]+)\)$/i);
+    if (link) return <Link key={`${keyPrefix}-j${i}`} href={link[2]} className="chat-journal-link">{link[1]}</Link>;
+
+    return seg;
   });
 }
 
