@@ -14,10 +14,18 @@ function safeContent(text) {
 // Renders "**bold**" and "[Journal title](/article/slug)" segments within a line of plain
 // text — the latter is how the AI recommends a Limitra Journal article: an underlined,
 // clickable title inline in the sentence, rather than a separate card like products get.
-// An unmatched trailing "**"/"[...]" (mid-stream, before its closing marker has arrived
-// yet) is left as literal text — it resolves itself once the rest streams in.
+// The AI sometimes bolds the whole link too ("**[Title](/article/slug)**"), so that combined
+// form is matched first — otherwise the plain "**...**" pattern below would swallow it whole
+// (greedily matching up to the closing "**") before the link pattern ever gets a chance.
+// An unmatched trailing "**"/"[...]" (mid-stream, before its closing marker has arrived yet)
+// is left as literal text — it resolves itself once the rest streams in.
 function renderInline(text, keyPrefix) {
-  return text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\(\/article\/[a-z0-9-]+\))/gi).map((seg, i) => {
+  return text.split(/(\*\*\[[^\]]+\]\(\/article\/[a-z0-9-]+\)\*\*|\*\*[^*]+\*\*|\[[^\]]+\]\(\/article\/[a-z0-9-]+\))/gi).map((seg, i) => {
+    const boldLink = seg.match(/^\*\*\[([^\]]+)\]\((\/article\/[a-z0-9-]+)\)\*\*$/i);
+    if (boldLink) {
+      return <strong key={`${keyPrefix}-bj${i}`}><Link href={boldLink[2]} className="chat-journal-link">{boldLink[1]}</Link></strong>;
+    }
+
     const bold = seg.match(/^\*\*([^*]+)\*\*$/);
     if (bold) return <strong key={`${keyPrefix}-b${i}`}>{bold[1]}</strong>;
 
