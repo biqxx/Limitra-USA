@@ -1657,16 +1657,30 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .chat-fab:hover { background: var(--brand-deep); transform: translateY(-2px); box-shadow: 0 14px 36px -10px rgba(22,53,122,.6); }
 .chat-fab.active { background: var(--brand-deep); padding: 14px; }
 
+/* modal overlay — chat opens as a centered modal on desktop, dimming the page behind it */
+.chat-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(10,14,30,.55); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  animation: fade .25s ease;
+}
+
 /* panel */
 .chat-panel {
-  width: 380px; height: 580px; background: var(--surface);
+  width: min(460px, 92vw); height: min(700px, 88vh);
+  background: var(--surface);
   border-radius: 20px; box-shadow: 0 32px 64px -24px rgba(10,15,40,.55);
   display: flex; flex-direction: column; overflow: hidden;
   border: 1px solid var(--line);
   animation: chatpop .3s cubic-bezier(.2,.9,.3,1);
 }
 @keyframes chatpop { from { opacity:0; transform: scale(.94) translateY(16px); } }
-@media (max-width: 460px) { .chat-panel { width: calc(100vw - 32px); } }
+
+/* mobile: as big as possible — true full-screen, no rounding, no backdrop margin */
+@media (max-width: 640px) {
+  .chat-overlay { padding: 0; }
+  .chat-panel { width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; border: none; }
+}
 
 /* header */
 .chat-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; background: var(--brand); }
@@ -1697,9 +1711,16 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .chat-msg { display: flex; gap: 10px; align-items: flex-start; }
 .chat-msg.user { flex-direction: row-reverse; }
 .chat-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--brand); display: flex; align-items: center; justify-content: center; font-family: var(--font-display,"Bodoni Moda"),serif; font-size: 14px; color: #fff; flex: none; }
+.chat-msg-col { display: flex; flex-direction: column; gap: 8px; max-width: calc(100% - 48px); }
 .chat-bubble { max-width: calc(100% - 48px); padding: 10px 13px; border-radius: 14px; font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+.chat-msg-col .chat-bubble { max-width: 100%; }
 .chat-msg.ai .chat-bubble { background: var(--bg); border: 1px solid var(--line); border-top-left-radius: 4px; }
 .chat-msg.user .chat-bubble { background: var(--brand); color: #fff; border-top-right-radius: 4px; }
+
+/* follow-up suggestion chips shown under the most recent reply */
+.chat-suggest-row { display: flex; flex-direction: column; gap: 6px; }
+.chat-suggest-chip { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; font-size: 12.5px; color: var(--brand); text-align: left; transition: border-color .2s, background .2s; cursor: pointer; }
+.chat-suggest-chip:hover { border-color: var(--brand); background: color-mix(in oklab, var(--brand) 6%, var(--surface)); }
 
 /* typing dots */
 .chat-bubble.typing { display: flex; gap: 5px; align-items: center; padding: 14px 16px; }

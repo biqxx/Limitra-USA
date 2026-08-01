@@ -97,11 +97,15 @@ export function CategoryGrid({ categories }) {
 
 export function ShareRow({ product }) {
   const [toast, setToast] = useState(null);
-  const url = typeof window !== 'undefined' ? `${window.location.origin}/product/${product.slug || product.id}` : `/product/${product.slug || product.id}`;
+  const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/product/${product.slug || product.id}` : `/product/${product.slug || product.id}`;
   const text = `${product.name} by ${product.brand} — found on Limitra`;
   const enc = encodeURIComponent;
 
-  const copyUrl = async (msg = 'Link copied to clipboard') => {
+  // Tags the link with which channel it was shared through, so traffic landing back on
+  // this product page can be attributed to the specific social platform it came from.
+  const socialUrl = (platform) => `${baseUrl}?social=${platform}`;
+
+  const copyUrl = async (url, msg = 'Link copied to clipboard') => {
     const ok = await copyToClipboard(url);
     if (!ok) return;
     setToast(msg);
@@ -109,21 +113,21 @@ export function ShareRow({ product }) {
   };
 
   const targets = [
-    { key: "facebook",  label: "Facebook",  href: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}` },
+    { key: "facebook",  label: "Facebook",  href: `https://www.facebook.com/sharer/sharer.php?u=${enc(socialUrl('facebook'))}` },
     { key: "instagram", label: "Instagram", copy: "Copied — paste in Instagram" },
     { key: "tiktok",    label: "TikTok",    copy: "Copied — paste in TikTok" },
-    { key: "x",         label: "X",         href: `https://twitter.com/intent/tweet?url=${enc(url)}&text=${enc(text)}` },
-    { key: "pinterest", label: "Pinterest", href: `https://pinterest.com/pin/create/button/?url=${enc(url)}&description=${enc(text)}` },
+    { key: "x",         label: "X",         href: `https://twitter.com/intent/tweet?url=${enc(socialUrl('x'))}&text=${enc(text)}` },
+    { key: "pinterest", label: "Pinterest", href: `https://pinterest.com/pin/create/button/?url=${enc(socialUrl('pinterest'))}&description=${enc(text)}` },
   ];
 
   return (
     <div className="share-row">
       <span className="share-label">Share</span>
-      <button className="share-btn" onClick={() => copyUrl()} aria-label="Copy link" title="Copy link"><I.link /></button>
+      <button className="share-btn" onClick={() => copyUrl(baseUrl)} aria-label="Copy link" title="Copy link"><I.link /></button>
       {targets.map((t) => {
         const Icon = I[t.key];
         return t.copy ? (
-          <button className="share-btn" key={t.key} onClick={() => copyUrl(t.copy)} aria-label={`Share on ${t.label}`} title={t.label}>
+          <button className="share-btn" key={t.key} onClick={() => copyUrl(socialUrl(t.key), t.copy)} aria-label={`Share on ${t.label}`} title={t.label}>
             <Icon />
           </button>
         ) : (

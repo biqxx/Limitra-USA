@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Article;
+use App\Models\ChatMessage;
 use App\Models\Product;
 use App\Models\SiteSetting;
 use App\Services\AiProvider;
 use App\Services\AiProviderFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
@@ -88,10 +90,17 @@ class ChatController extends Controller
             Log::info('[Chat] Step 2 — skipped (scanning phase answered directly)');
             Log::info('[Chat] Reply sent', ['length' => mb_strlen($scan['direct_reply']), 'text' => $scan['direct_reply']]);
 
-            return response()->stream(function () use ($scan, $user) {
+            return response()->stream(function () use ($scan, $user, $provider, $lastMsg) {
                 while (ob_get_level() > 0) ob_end_flush();
                 echo 'data: ' . json_encode(['text' => $scan['direct_reply']]) . "\n\n";
                 flush();
+
+                $suggestions = $this->generateFollowUps($provider, $lastMsg, $scan['direct_reply']);
+                if (! empty($suggestions)) {
+                    echo 'data: ' . json_encode(['suggestions' => $suggestions]) . "\n\n";
+                    flush();
+                }
+
                 echo "data: [DONE]\n\n";
                 flush();
 
@@ -122,14 +131,20 @@ class ChatController extends Controller
 
         // Step 2b: Journal (article) search — same "search now, ground on results" shape
         // as products, so Elo can point customers to an existing Limitra Journal guide
-        // instead of only ever recommending products.
+        // instead of only ever recommending products. Each matched journal also carries
+        // its actual body content and the products referenced inside it (see
+        // searchJournals()/extractArticleContent()) — those products are merged into the
+        // same $products/$tokenMap pool the general catalog search uses, so the AI can
+        // <product:TOKEN> tag anything a journal recommends with the exact same mechanism.
         $journals = [];
         $journalTokenMap = [];
         if ($scan['needs_journals'] && ! empty($scan['journal_search'])) {
             Log::info('[Chat] Step 2b — searching journals', ['search' => $scan['journal_search']]);
-            $jresult = $this->searchJournals($scan['journal_search']);
+            $jresult = $this->searchJournals($scan['journal_search'], $products, $tokenMap);
             $journals = $jresult['journals'];
             $journalTokenMap = $jresult['map'];
+            $products = $jresult['products'];
+            $tokenMap = $jresult['token_map'];
             Log::info('[Chat] Journal search complete', ['journals_found' => count($journals)]);
         } else {
             Log::info('[Chat] Step 2b — skipped (no journal search needed)');
@@ -162,7 +177,7 @@ class ChatController extends Controller
 
         Log::info('[Chat] Step 3 — starting stream');
 
-        return response()->stream(function () use ($provider, $system, $groundedMessages, $tokenMap, $journalTokenMap, $user) {
+        return response()->stream(function () use ($provider, $system, $groundedMessages, $tokenMap, $journalTokenMap, $user, $lastMsg) {
             while (ob_get_level() > 0) ob_end_flush();
 
             // Buffers a possible partial "<product:...>" tag or "[label](journal:...)" link
@@ -216,6 +231,14 @@ class ChatController extends Controller
 
                 Log::info('[Chat] Stream completed successfully');
                 Log::info('[Chat] Reply sent', ['length' => mb_strlen($fullReply), 'text' => $fullReply]);
+
+                if ($fullReply !== '') {
+                    $suggestions = $this->generateFollowUps($provider, $lastMsg, $fullReply);
+                    if (! empty($suggestions)) {
+                        echo 'data: ' . json_encode(['suggestions' => $suggestions]) . "\n\n";
+                        flush();
+                    }
+                }
 
                 if ($user && $fullReply !== '') {
                     $user->chatMessages()->create(['role' => 'assistant', 'content' => $fullReply]);
@@ -277,6 +300,139 @@ class ChatController extends Controller
         }
 
         return response()->json(['merged' => true]);
+    }
+
+    /**
+     * Site-wide "start chatting" suggestions shown when the chat widget is empty — the
+     * same for every visitor (guest or logged in), refreshed hourly from what customers
+     * have actually been asking about recently rather than a fixed hardcoded list.
+     */
+    public function starters()
+    {
+        return response()->json(['starters' => $this->trendingStarters()]);
+    }
+
+    // ── Trending starters ─────────────────────────────────────────────────────
+
+    /** Falls back to this when there isn't enough recent chat history to summarize yet. */
+    private function defaultStarters(): array
+    {
+        return [
+            "I'm looking for a gift under $100",
+            "What's trending in beauty right now?",
+            "Help me build a capsule wardrobe",
+            "What should I pack for a beach trip?",
+        ];
+    }
+
+    /**
+     * Summarizes recent customer messages (across everyone — not per-user) into 4 fresh
+     * starter prompts, cached for an hour so this never costs an AI call per page view.
+     */
+    private function trendingStarters(): array
+    {
+        return Cache::remember('chat.trending_starters', 3600, function () {
+            $fallback = $this->defaultStarters();
+
+            $recentMessages = ChatMessage::where('role', 'user')
+                ->where('created_at', '>=', now()->subDays(3))
+                ->orderByDesc('created_at')
+                ->limit(150)
+                ->pluck('content');
+
+            // Not enough real signal yet to detect a trend from — keep the defaults
+            // rather than asking the AI to invent themes from almost nothing.
+            if ($recentMessages->count() < 10) {
+                return $fallback;
+            }
+
+            try {
+                $provider = AiProviderFactory::make();
+                $system = <<<'EOF'
+You generate 4 short "start chatting" suggestion prompts for a luxury fashion/lifestyle
+shopping assistant's chat widget, written in first person as if a customer typed them.
+
+You'll be given a sample of what customers have actually been asking the assistant recently.
+Synthesize 4 SHORT (under 12 words each), varied, first-person prompts that reflect the
+common or trending themes in that sample. Generalize into fresh natural phrasing — never
+quote a real customer's message verbatim. Keep the tone consistent with a premium shopping
+assistant.
+
+Reply with RAW JSON only — no markdown, no code fences, no explanation. Use exactly this
+shape: {"starters": ["...", "...", "...", "..."]}
+EOF;
+
+                $sample = $recentMessages->map(fn ($m) => '- ' . mb_substr($m, 0, 200))->implode("\n");
+                $messages = [['role' => 'user', 'content' => "Recent customer messages:\n{$sample}"]];
+
+                $raw = $provider->chat($system, $messages, 400, false, []);
+                $cleaned = preg_replace('/^```(?:json)?\s*/i', '', trim($raw));
+                $cleaned = preg_replace('/\s*```$/', '', $cleaned);
+                $data = json_decode($cleaned, true);
+
+                $starters = array_values(array_filter(array_map(
+                    fn ($s) => trim((string) $s),
+                    (array) ($data['starters'] ?? [])
+                ), fn ($s) => $s !== ''));
+
+                return count($starters) >= 2 ? array_slice($starters, 0, 4) : $fallback;
+            } catch (\Throwable $e) {
+                Log::error('[Chat] Trending starters generation failed', [
+                    'error' => $e->getMessage(),
+                    'file'  => $e->getFile() . ':' . $e->getLine(),
+                ]);
+                return $fallback;
+            }
+        });
+    }
+
+    /**
+     * Suggests 0-2 short follow-up prompts after a reply — only when a genuine next step
+     * exists; returns an empty array when the reply already resolves the request.
+     */
+    private function generateFollowUps(AiProvider $provider, string $userMsg, string $reply): array
+    {
+        try {
+            $system = <<<'EOF'
+You generate short follow-up prompt suggestions for a shopping-assistant chat widget, written
+from the CUSTOMER's point of view (first person), as if the customer typed them next.
+
+Given the customer's last message and the assistant's reply, suggest 0 to 2 natural next
+messages the customer might send — only when a genuine next step exists (narrowing a
+recommendation, comparing options, asking for styling advice, a related follow-up). Return an
+empty array if the reply already fully resolves the request and no natural follow-up exists —
+do not force one.
+
+Each suggestion must be under 10 words, first-person, and a complete, sendable chat message —
+not a question about the assistant, not meta-commentary.
+
+Reply with RAW JSON only — no markdown, no code fences, no explanation. Use exactly this
+shape: {"suggestions": ["...", "..."]}
+EOF;
+
+            $messages = [[
+                'role'    => 'user',
+                'content' => "Customer's message: \"{$userMsg}\"\n\nAssistant's reply: \"{$reply}\"",
+            ]];
+
+            $raw = $provider->chat($system, $messages, 200, false, []);
+            $cleaned = preg_replace('/^```(?:json)?\s*/i', '', trim($raw));
+            $cleaned = preg_replace('/\s*```$/', '', $cleaned);
+            $data = json_decode($cleaned, true);
+
+            $suggestions = array_values(array_filter(array_map(
+                fn ($s) => trim((string) $s),
+                (array) ($data['suggestions'] ?? [])
+            ), fn ($s) => $s !== ''));
+
+            return array_slice($suggestions, 0, 2);
+        } catch (\Throwable $e) {
+            Log::error('[Chat] Follow-up suggestion generation failed', [
+                'error' => $e->getMessage(),
+                'file'  => $e->getFile() . ':' . $e->getLine(),
+            ]);
+            return [];
+        }
     }
 
     // ── Scanning phase ────────────────────────────────────────────────────────
@@ -625,9 +781,15 @@ class ChatController extends Controller
      * Same shape as searchProducts(): scores candidates by relevance and returns a short
      * per-token map so the AI can reliably reproduce "j1" instead of a real slug inline.
      *
-     * @return array{journals: array, map: array<string,string>}
+     * Each matched journal also carries its actual body content (extractArticleContent())
+     * and the products referenced inside it, resolved and merged into the SAME product
+     * pool/token map the general catalog search uses ($products/$tokenMap in, in that
+     * order) — so a product a journal recommends can be <product:TOKEN> tagged exactly
+     * like any other, and never gets a second, colliding token if it's already in the pool.
+     *
+     * @return array{journals: array, map: array<string,string>, products: array, token_map: array<string,string>}
      */
-    private function searchJournals(array $search): array
+    private function searchJournals(array $search, array $products = [], array $tokenMap = []): array
     {
         $query = Article::query();
 
@@ -658,10 +820,12 @@ class ChatController extends Controller
                 'sql'   => $query->toSql(),
                 'file'  => $e->getFile() . ':' . $e->getLine(),
             ]);
-            return ['journals' => [], 'map' => []];
+            return ['journals' => [], 'map' => [], 'products' => $products, 'token_map' => $tokenMap];
         }
 
-        if ($candidates->isEmpty()) return ['journals' => [], 'map' => []];
+        if ($candidates->isEmpty()) {
+            return ['journals' => [], 'map' => [], 'products' => $products, 'token_map' => $tokenMap];
+        }
 
         $journals = $candidates
             ->sortByDesc(function ($a) use ($terms) {
@@ -694,20 +858,88 @@ class ChatController extends Controller
         // Token maps to the real slug (not an ID) — substituteJournalTokens() turns the
         // AI's "journal:j1" into the actual "/article/{slug}" URL server-side, so the
         // frontend just needs to render a normal markdown-style link, no lookup required.
+        //
+        // realIdToToken lets a product already found by the general catalog search (or an
+        // earlier journal in this same loop) keep its existing token instead of being
+        // added a second time under a new one.
+        $realIdToToken = array_flip($tokenMap);
+        $nextTokenNum  = count($tokenMap);
+
         $map = [];
-        $structured = $journals->map(function ($a, $i) use (&$map) {
+        $structured = $journals->map(function ($a, $i) use (&$map, &$products, &$tokenMap, &$realIdToToken, &$nextTokenNum) {
             $token = 'j' . ($i + 1);
             $map[$token] = $a->slug;
 
+            [$content, $productIds] = $this->extractArticleContent($a);
+
+            // Cap how many of a single journal's products get pulled in — an article can
+            // reference far more items than are useful to ground one reply on.
+            $productIds = array_slice($productIds, 0, 6);
+            $productTokens = [];
+
+            if (! empty($productIds)) {
+                foreach (Product::whereIn('id', $productIds)->get() as $p) {
+                    $pid = (string) $p->id;
+
+                    if (isset($realIdToToken[$pid])) {
+                        $productTokens[] = $realIdToToken[$pid];
+                        continue;
+                    }
+
+                    $pToken = 'p' . (++$nextTokenNum);
+                    $tokenMap[$pToken] = $pid;
+                    $realIdToToken[$pid] = $pToken;
+                    $products[] = [
+                        'id'          => $pToken,
+                        'name'        => $p->name,
+                        'brand'       => $p->brand ?? 'Limitra Select',
+                        'category'    => implode(' › ', array_filter([$p->category?->name, $p->subcategory?->name])),
+                        'price'       => $p->price,
+                        'description' => $p->description,
+                    ];
+                    $productTokens[] = $pToken;
+                }
+            }
+
             return [
-                'id'      => $token,
-                'title'   => $a->title,
-                'tag'     => $a->tag,
-                'excerpt' => $a->excerpt,
+                'id'       => $token,
+                'title'    => $a->title,
+                'tag'      => $a->tag,
+                'excerpt'  => $a->excerpt,
+                'content'  => $content,
+                'products' => $productTokens,
             ];
         })->values()->toArray();
 
-        return ['journals' => $structured, 'map' => $map];
+        return ['journals' => $structured, 'map' => $map, 'products' => $products, 'token_map' => $tokenMap];
+    }
+
+    /**
+     * Flattens an article's block-based body into plain-text content (for grounding the
+     * AI on what the article actually says, not just its excerpt) and collects the product
+     * IDs referenced across any "products" blocks.
+     *
+     * @return array{0: string, 1: array<int,string>}
+     */
+    private function extractArticleContent(Article $article): array
+    {
+        $text = [];
+        $productIds = [];
+
+        foreach ((array) ($article->body ?? []) as $block) {
+            match ($block['type'] ?? null) {
+                'lead', 'text', 'heading', 'pullquote' => $text[] = trim((string) ($block['text'] ?? '')),
+                'products' => $productIds = array_merge($productIds, array_filter((array) ($block['ids'] ?? []))),
+                default => null,
+            };
+        }
+
+        $content = implode("\n\n", array_filter($text));
+        if (mb_strlen($content) > 2000) {
+            $content = mb_substr($content, 0, 2000) . '…';
+        }
+
+        return [$content, array_values(array_unique($productIds))];
     }
 
     /** Replaces AI-written "(journal:TOKEN)" markdown-link targets with the real article URL. */
@@ -787,17 +1019,21 @@ SECTION;
         if ($hasJournals) {
             $journalSection = <<<SECTION
 "journals" is a non-empty array of Limitra Journal articles, each shaped:
-  {"id": "j1", "title": "...", "tag": "...", "excerpt": "..."}
+  {"id": "j1", "title": "...", "tag": "...", "excerpt": "...", "content": "...", "products": ["p1", "p2"]}
 
-These were already searched and matched for this customer's request. When one of them
-genuinely helps answer the question (a styling/editorial guide, a "how to" topic, seasonal
-or trend content), recommend it naturally in your reply.
+These were already searched and matched for this customer's request. "content" is the
+article's actual body text (not just the excerpt) — read it to accurately describe what the
+article covers, rather than guessing from the title alone. "products" lists the tokens of
+products that article specifically recommends (these are already included in "products"
+above too, using the exact same tokens). When one of these articles genuinely helps answer
+the question (a styling/editorial guide, a "how to" topic, seasonal or trend content),
+recommend it naturally in your reply.
 
 STRICT GROUNDING RULES:
 - Only reference articles that appear in "journals". Never name, describe, or imply the
   existence of any other article that is not in that array.
-- Only use the fields given for each article (title, tag, excerpt). Never invent additional
-  claims about an article's content beyond its excerpt.
+- Only use the fields given for each article (title, tag, excerpt, content). Never invent
+  additional claims about an article's content beyond what "content" and "excerpt" say.
 
 When you mention an article, write its title as a markdown link with the exact token from its
 "id" field (e.g. "j1") as the link target, in this exact form:
@@ -805,7 +1041,9 @@ When you mention an article, write its title as a markdown link with the exact t
 Example:
   "Our guide on [Building a Capsule Wardrobe](journal:j1) walks through exactly that."
 Do not invent or modify the token. This is separate from product tags — an article
-recommendation is never wrapped in a <product:...> tag.
+recommendation is never wrapped in a <product:...> tag. If an article's "products" list gives
+you specific items it recommends, you may also mention those using their own <product:TOKEN>
+tag, exactly as you would for any other product in "products".
 SECTION;
         } else {
             $journalSection = '"journals" is an empty array — no Limitra Journal article matched this query. Do not '

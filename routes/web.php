@@ -32,6 +32,7 @@ Route::get('/looks', [StyleLookController::class, 'index'])->name('looks.index')
 Route::get('/look/{slug}', [StyleLookController::class, 'show'])->name('look.show');
 Route::get('/page/{page}', [StaticPageController::class, 'show'])->name('page.show');
 Route::post('/api/chat', [ChatController::class, 'message'])->name('chat.message')->middleware('throttle:30,1');
+Route::get('/api/chat/starters', [ChatController::class, 'starters'])->name('chat.starters')->middleware('throttle:60,1');
 Route::post('/newsletter/subscribe', [NewsletterController::class, 'store'])->name('newsletter.subscribe');
 Route::get('/go/{id}', [RedirectController::class, 'go'])->name('go')->middleware('throttle:120,1');
 Route::post('/videos/{id}/track-view', [VideoViewController::class, 'store'])->name('videos.track-view')->middleware('throttle:60,1');

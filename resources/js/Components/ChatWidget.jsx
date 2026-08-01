@@ -101,7 +101,7 @@ function TypingDots() {
   );
 }
 
-function ChatMessage({ msg, catalog }) {
+function ChatMessage({ msg, catalog, isLast, onSuggestion }) {
   if (msg.role === "user") {
     return (
       <div className="chat-msg user">
@@ -123,26 +123,40 @@ function ChatMessage({ msg, catalog }) {
   return (
     <div className="chat-msg ai">
       <div className="chat-avatar"><span>L</span></div>
-      <div className="chat-bubble">
-        {parts.map((part, i) => {
-          if (i % 2 === 0) {
-            // Text segment
-            return renderTextBlock(part, `t${i}`, listCounter);
-          }
-          // Product ID — look it up in the catalog and render the card
-          const product = catalog?.find((p) => p.id === part);
-          return product ? (
-            <div key={`p${i}`} className="chat-prod-inline">
-              <ChatProdCard p={product} />
-            </div>
-          ) : null;
-        })}
+      <div className="chat-msg-col">
+        <div className="chat-bubble">
+          {parts.map((part, i) => {
+            if (i % 2 === 0) {
+              // Text segment
+              return renderTextBlock(part, `t${i}`, listCounter);
+            }
+            // Product ID — look it up in the catalog and render the card
+            const product = catalog?.find((p) => p.id === part);
+            return product ? (
+              <div key={`p${i}`} className="chat-prod-inline">
+                <ChatProdCard p={product} />
+              </div>
+            ) : null;
+          })}
+        </div>
+        {/* Only the most recent reply's follow-up suggestions stay relevant once the
+            conversation has moved on, so these only render for the last message. */}
+        {isLast && msg.suggestions?.length > 0 && (
+          <div className="chat-suggest-row">
+            {msg.suggestions.map((s, i) => (
+              <button key={i} className="chat-suggest-chip" onClick={() => onSuggestion(s)}>{s}</button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-const STARTERS = [
+// Same defaults the backend falls back to when there isn't enough recent chat history to
+// summarize yet — shown immediately while the real (hourly-refreshed, site-wide trending)
+// starters are fetched from /api/chat/starters, so the welcome screen never looks empty.
+const DEFAULT_STARTERS = [
   "I'm looking for a gift under $100",
   "What's trending in beauty right now?",
   "Help me build a capsule wardrobe",
@@ -154,7 +168,7 @@ function getCsrfToken() {
   return meta ? meta.getAttribute('content') : '';
 }
 
-function ChatPanel({ onClose, catalog }) {
+function ChatPanel({ onClose, catalog, onMouseDown }) {
   const { props } = usePage();
   const user = props.auth?.user || null;
   const mergedRef = useRef(false);
@@ -166,10 +180,23 @@ function ChatPanel({ onClose, catalog }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [starters, setStarters] = useState(DEFAULT_STARTERS);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
   const messages = history.length > 0 ? history : [];
+
+  // Site-wide, hourly-refreshed starter suggestions (same for every visitor) — replaces
+  // the fixed list with prompts reflecting what customers have actually been asking about
+  // recently. Falls back to DEFAULT_STARTERS while this loads or if it fails.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/chat/starters')
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled && Array.isArray(d.starters) && d.starters.length) setStarters(d.starters); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -267,6 +294,14 @@ function ChatPanel({ onClose, catalog }) {
                 return updated;
               });
             }
+            if (parsed.suggestions) {
+              setHistory((prev) => {
+                const updated = [...prev];
+                const lastMsg = updated[updated.length - 1];
+                updated[updated.length - 1] = { ...lastMsg, suggestions: parsed.suggestions };
+                return updated;
+              });
+            }
           } catch (e) { /* skip malformed SSE lines */ }
         }
       }
@@ -286,7 +321,7 @@ function ChatPanel({ onClose, catalog }) {
   };
 
   return (
-    <div className="chat-panel">
+    <div className="chat-panel" onMouseDown={onMouseDown}>
       <div className="chat-header">
         <div className="chat-header-left">
           <div className="chat-logo">L</div>
@@ -314,13 +349,15 @@ function ChatPanel({ onClose, catalog }) {
             <h3>Hello! I'm your personal shopping guide.</h3>
             <p>Tell me what you're looking for and I'll find the perfect picks from our curated collection.</p>
             <div className="chat-starters">
-              {STARTERS.map((s) => (
+              {starters.map((s) => (
                 <button key={s} className="chat-starter-btn" onClick={() => send(s)}>{s}</button>
               ))}
             </div>
           </div>
         ) : (
-          messages.filter(m => m.content).map((msg, i) => <ChatMessage key={i} msg={msg} catalog={catalog} />)
+          messages.filter(m => m.content).map((msg, i, arr) => (
+            <ChatMessage key={i} msg={msg} catalog={catalog} isLast={i === arr.length - 1} onSuggestion={send} />
+          ))
         )}
         {loading && history.length > 0 && history[history.length - 1]?.content === '' && <TypingDots />}
         {error && <div className="chat-error">{error}</div>}
@@ -351,30 +388,41 @@ function ChatPanel({ onClose, catalog }) {
 export default function ChatWidget({ catalog }) {
   const [open, setOpen] = useState(false);
 
+  // Now a true modal (see .chat-overlay) — lock background scroll and close on Escape,
+  // matching every other modal in the app (AuthModal, SearchModal, mobile menu, etc.).
   useEffect(() => {
-    if (open) document.body.style.setProperty("--chat-open", "1");
-    else document.body.style.removeProperty("--chat-open");
+    if (!open) return;
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", esc);
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", esc); document.body.style.overflow = ""; };
   }, [open]);
 
   return (
-    <div className="chat-widget">
-      {open && <ChatPanel onClose={() => setOpen(false)} catalog={catalog} />}
-      <button
-        className={"chat-fab" + (open ? " active" : "")}
-        onClick={() => setOpen((o) => !o)}
-        aria-label={open ? "Close chat" : "Open shopping assistant"}
-      >
-        {open ? (
-          <I.close width="22" height="22" />
-        ) : (
-          <>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            <span>Ask Elo</span>
-          </>
-        )}
-      </button>
-    </div>
+    <>
+      {open && (
+        <div className="chat-overlay" onMouseDown={() => setOpen(false)}>
+          <ChatPanel onClose={() => setOpen(false)} catalog={catalog} onMouseDown={(e) => e.stopPropagation()} />
+        </div>
+      )}
+      <div className="chat-widget">
+        <button
+          className={"chat-fab" + (open ? " active" : "")}
+          onClick={() => setOpen((o) => !o)}
+          aria-label={open ? "Close chat" : "Open shopping assistant"}
+        >
+          {open ? (
+            <I.close width="22" height="22" />
+          ) : (
+            <>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <span>Ask Elo</span>
+            </>
+          )}
+        </button>
+      </div>
+    </>
   );
 }
