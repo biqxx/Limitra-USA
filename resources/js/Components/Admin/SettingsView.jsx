@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router } from '@inertiajs/react';
 import I from '../Icons';
-import { useUploadBusy, ImgInput } from './AdminShared';
+import { useUploadBusy, ImgInput, postJSON } from './AdminShared';
 
 function HeroSlidesEditor({ value, onChange, onBusyChange }) {
   const parse = (v) => { try { return JSON.parse(v || '[]'); } catch (e) { return []; } };
@@ -88,6 +88,7 @@ export default function SettingsView({ settings, onToast }) {
   const [form, setForm] = useState({ ...settings });
   const [imgBusy, bumpImgBusy] = useUploadBusy();
   const [slidesBusy, setSlidesBusy] = useState(false);
+  const [tokenBusy, setTokenBusy] = useState(false);
   const anyBusy = imgBusy || slidesBusy;
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const save = () => {
@@ -95,6 +96,20 @@ export default function SettingsView({ settings, onToast }) {
       only: ['settings'], preserveState: true, preserveScroll: true,
       onSuccess: () => onToast('Settings saved.')
     });
+  };
+
+  const regenerateToken = async () => {
+    if (!confirm('Generate a new token? Any browser extension using the current one will stop working until updated.')) return;
+    setTokenBusy(true);
+    try {
+      const { token } = await postJSON('/admin/settings/extension-token/regenerate', {});
+      set('extension_api_token', token);
+      onToast('New extension token generated — copy it into the extension now.');
+    } catch (e) {
+      onToast('Could not generate a token — try again.');
+    } finally {
+      setTokenBusy(false);
+    }
   };
   return (
     <>
@@ -210,6 +225,22 @@ export default function SettingsView({ settings, onToast }) {
               <input type="number" className="adm-input" min={0} step={3600000} value={form.newsletter_popup_cooldown_ms || 86400000} onChange={(e) => set('newsletter_popup_cooldown_ms', e.target.value)} />
               <span style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, display: 'block' }}>e.g. 86400000 = 24 hours before showing again</span>
             </div>
+          </div>
+        </div>
+      </div>
+      <div className="adm-panel">
+        <h2>Browser extension access</h2>
+        <p className="sub">Shared token the ProductPicker Chrome extension uses to send picked products here. Paste this into the extension's options page.</p>
+        <div className="adm-form">
+          <div className="adm-field">
+            <label>Extension API token</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="adm-input" readOnly value={form.extension_api_token || ''} placeholder="No token generated yet" style={{ fontFamily: 'monospace' }} />
+              <button type="button" className="adm-btn adm-btn-ghost" onClick={regenerateToken} disabled={tokenBusy}>
+                {tokenBusy ? 'Generating…' : 'Generate new token'}
+              </button>
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, display: 'block' }}>Generating a new token immediately invalidates the old one — any extension still using it will get a 401 until updated.</span>
           </div>
         </div>
       </div>

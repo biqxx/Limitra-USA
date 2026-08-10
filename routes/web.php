@@ -8,6 +8,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CollectionController;
+use App\Http\Controllers\ExtensionController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\GuidesController;
 use App\Http\Controllers\HomeController;
@@ -58,6 +59,14 @@ Route::middleware('auth')->prefix('api')->group(function () {
     Route::post('/chat/merge', [ChatController::class, 'merge'])->name('chat.merge');
 });
 
+// ProductPicker Chrome extension (token authenticated, not session/CSRF) — nested under
+// /api/* for the same clean-JSON-error-response reason as the group above.
+Route::middleware(['extension.token', 'throttle:60,1'])->prefix('api/extension')->group(function () {
+    Route::get('/categories', [ExtensionController::class, 'categories'])->name('extension.categories');
+    Route::post('/products/check-duplicates', [ExtensionController::class, 'checkDuplicates'])->name('extension.products.check-duplicates');
+    Route::post('/products/upload', [ExtensionController::class, 'uploadProducts'])->name('extension.products.upload');
+});
+
 // Admin (protected)
 Route::middleware('admin')->group(function () {
     Route::get('/admin', [AdminController::class, 'index'])->name('admin');
@@ -103,6 +112,7 @@ Route::middleware('admin')->group(function () {
     Route::post('/admin/conversions/bulk-import', [AdminController::class, 'bulkImportConversions'])->name('admin.conversions.bulk');
 
     Route::put('/admin/settings', [AdminController::class, 'updateSettings'])->name('admin.settings.update');
+    Route::post('/admin/settings/extension-token/regenerate', [AdminController::class, 'regenerateExtensionToken'])->name('admin.settings.extension-token.regenerate');
 
     // Lightweight, unpaginated lookups — every row, but only the fields needed for
     // the cross-editor product picker, slug/key-uniqueness checks, and bulk-import

@@ -229,7 +229,7 @@ export function toBool(s) {
   return ['true', '1', 'yes', 'y'].includes(String(s || '').trim().toLowerCase());
 }
 
-async function postJSON(url, body) {
+export async function postJSON(url, body) {
   const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
   const res = await fetch(url, {
     method: 'POST',

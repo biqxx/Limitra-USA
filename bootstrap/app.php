@@ -20,6 +20,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'admin' => \App\Http\Middleware\EnsureIsAdmin::class,
+            'extension.token' => \App\Http\Middleware\EnsureExtensionToken::class,
+        ]);
+        // The Chrome extension calls these routes with a bearer token, not a session —
+        // it has no CSRF cookie to send.
+        $middleware->validateCsrfTokens(except: [
+            'api/extension/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

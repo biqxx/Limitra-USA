@@ -16,12 +16,17 @@ use App\Models\StaticPage;
 use App\Models\Subcategory;
 use App\Models\Video;
 use App\Services\AnalyticsService;
+use App\Services\ProductWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class AdminController extends Controller
 {
+    public function __construct(private ProductWriter $productWriter)
+    {
+    }
+
     public function index(Request $request)
     {
         // Eager: small, needed for the Dashboard tab and nav badges to render
@@ -408,47 +413,7 @@ class AdminController extends Controller
     {
         $request->validate(['name' => 'required|string', 'price' => 'required|string']);
 
-        $id = (string) Str::uuid();
-        $slug = $this->uniqueProductSlug($request->input('slug') ?: $request->name);
-
-        $category = Category::where('name', $request->category)->first();
-        $subcategory = $category && $request->subcategory
-            ? Subcategory::where('category_id', $category->id)->where('name', $request->subcategory)->first()
-            : null;
-
-        $product = Product::create([
-            'id' => $id,
-            'slug' => $slug,
-            'name' => $request->name,
-            'brand' => $request->brand ?: 'Limitra Select',
-            'price' => $request->price,
-            'category_id' => $category?->id,
-            'subcategory_id' => $subcategory?->id,
-            'retailer' => $request->retailer,
-            'affiliate_url' => $request->affiliateUrl,
-            'image' => $request->image,
-            'description' => $request->description ?: ($request->name . ' — a Limitra-curated pick.'),
-            'badge' => $request->badge ?: null,
-            'rating' => $request->rating ? min(5, max(0, (float) $request->rating)) : 4.8,
-            'is_featured' => (bool) $request->is_featured,
-            'is_resort' => (bool) $request->is_resort,
-            'is_new' => (bool) $request->is_new,
-            'features' => $this->cleanArray($request->highlights ?? []),
-            'slot' => null,
-        ]);
-
-        $about = $this->cleanArray($request->about ?? []);
-        $highlights = $this->cleanArray($request->highlights ?? []);
-        $specs = $this->cleanSpecs($request->specs ?? []);
-
-        if ($about || $highlights || $specs) {
-            ProductDetail::create([
-                'product_id' => $id,
-                'about' => $about,
-                'highlights' => $highlights,
-                'specs' => $specs,
-            ]);
-        }
+        $this->productWriter->createFromArray($request->all());
 
         return back();
     }
@@ -477,12 +442,12 @@ class AdminController extends Controller
             'is_featured' => (bool) $request->is_featured,
             'is_resort' => (bool) $request->is_resort,
             'is_new' => (bool) $request->is_new,
-            'features' => $this->cleanArray($request->highlights ?? []),
+            'features' => $this->productWriter->cleanArray($request->highlights ?? []),
         ]);
 
-        $about = $this->cleanArray($request->about ?? []);
-        $highlights = $this->cleanArray($request->highlights ?? []);
-        $specs = $this->cleanSpecs($request->specs ?? []);
+        $about = $this->productWriter->cleanArray($request->about ?? []);
+        $highlights = $this->productWriter->cleanArray($request->highlights ?? []);
+        $specs = $this->productWriter->cleanSpecs($request->specs ?? []);
 
         ProductDetail::updateOrCreate(
             ['product_id' => $id],
@@ -867,27 +832,13 @@ class AdminController extends Controller
         return back();
     }
 
-    // ── Helpers ───────────────────────────────────────────────
-
-    private function cleanArray(array $arr): array
+    /** Generates a new shared token for the ProductPicker extension, invalidating the old one. */
+    public function regenerateExtensionToken()
     {
-        return array_values(array_filter(array_map('trim', $arr), fn ($x) => $x !== ''));
+        $token = Str::random(40);
+        SiteSetting::setMany(['extension_api_token' => $token]);
+
+        return response()->json(['token' => $token]);
     }
 
-    private function cleanSpecs(array $specs): array
-    {
-        return array_values(array_filter($specs, fn ($r) => ($r[0] ?? '') || ($r[1] ?? '')));
-    }
-
-    private function uniqueProductSlug(?string $source): string
-    {
-        $base = Str::slug($source ?: '') ?: Str::slug(Str::random(8));
-        $slug = $base;
-        $n = 2;
-        while (Product::where('slug', $slug)->exists()) {
-            $slug = $base . '-' . $n;
-            $n++;
-        }
-        return $slug;
-    }
 }
