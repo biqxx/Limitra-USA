@@ -89,14 +89,31 @@ class ExtensionController extends Controller
     {
         set_time_limit(120);
 
+        // $request->validate() returns ONLY the fields it has a rule for — any key on an
+        // item that isn't listed here gets silently stripped before the code below ever
+        // sees it. Every field ExtensionController/ProductWriter actually reads from
+        // $item must have a rule, even a lenient "nullable" one, or it always comes
+        // through as null/[] regardless of what the extension actually sent.
         $data = $request->validate([
-            'importedBy'      => 'nullable|string|max:255',
-            'items'           => 'required|array|min:1',
-            'items.*.retailer'   => 'required|string',
-            'items.*.externalId' => 'nullable|string',
-            'items.*.url'        => 'required|string',
-            'items.*.name'       => 'required|string',
-            'items.*.price'      => 'required|string',
+            'importedBy'              => 'nullable|string|max:255',
+            'items'                   => 'required|array|min:1',
+            'items.*.retailer'        => 'required|string',
+            'items.*.externalId'      => 'nullable|string',
+            'items.*.url'             => 'required|string',
+            'items.*.name'            => 'required|string',
+            'items.*.brand'           => 'nullable|string',
+            'items.*.badge'           => 'nullable|string',
+            'items.*.price'           => 'required|string',
+            'items.*.image'           => 'nullable|string',
+            'items.*.description'     => 'nullable|string',
+            'items.*.about'           => 'nullable|array',
+            'items.*.about.*'         => 'nullable|string',
+            'items.*.highlights'      => 'nullable|array',
+            'items.*.highlights.*'    => 'nullable|string',
+            'items.*.specs'           => 'nullable|array',
+            'items.*.specs.*'         => 'array',
+            'items.*.categoryName'    => 'nullable|string',
+            'items.*.subcategoryName' => 'nullable|string',
         ]);
 
         $importedBy = $data['importedBy'] ?? null;
@@ -116,6 +133,7 @@ class ExtensionController extends Controller
                         'retailer_id' => $retailer->id,
                         'affiliateUrl' => $item['url'],
                         'image'       => $item['image'] ?? null,
+                        'badge'       => $item['badge'] ?? null,
                         'description' => $item['description'] ?? null,
                         'about'       => $item['about'] ?? [],
                         'highlights'  => $item['highlights'] ?? [],
