@@ -10,13 +10,12 @@ class Product extends Model
     public $incrementing = false;
     protected $keyType = 'string';
 
-    protected $fillable = ['id','slug','name','brand','price','category_id','subcategory_id','retailer','retailer_id','affiliate_url','image','gallery','slot','description','editor_note','is_featured','is_resort','is_new','badge','rating','days_ago','tags','related_products','features'];
+    protected $fillable = ['id','slug','name','brand','price','category_id','subcategory_id','retailer','retailer_id','affiliate_url','image','slot','description','editor_note','is_featured','is_resort','is_new','badge','rating','days_ago','tags','related_products','features'];
 
     protected $casts = [
         'tags' => 'array',
         'related_products' => 'array',
         'features' => 'array',
-        'gallery' => 'array',
         'is_featured' => 'boolean',
         'is_resort' => 'boolean',
         'is_new' => 'boolean',
@@ -53,7 +52,6 @@ class Product extends Model
             'price' => $this->price,
             'description' => $this->description,
             'image' => $this->image,
-            'gallery' => $this->gallery ?? [],
             'affiliate_url' => $this->affiliate_url,
             'category' => $this->category?->name,
             'category_slug' => $this->category?->slug,

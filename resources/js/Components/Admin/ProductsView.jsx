@@ -1,49 +1,11 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { router } from '@inertiajs/react';
 import I from '../Icons';
 import { BADGES } from '../../constants';
 import DataTable from './DataTable';
 import {
   ImgInput, admSlug, useUploadBusy, BulkImportButton, splitList, toBool,
-  SessionExpiredError, uploadImageFile, UploadErrorNote,
 } from './AdminShared';
-
-function GalleryInput({ items, onChange, onBusyChange }) {
-  const fileRef = useRef(null);
-  const [busy, setBusy] = useState(false);
-  const [uploadError, setUploadError] = useState(null);
-  const addFiles = async (e) => {
-    const files = [...(e.target.files || [])];
-    if (!files.length) return;
-    setBusy(true); setUploadError(null); onBusyChange?.(true);
-    const urls = [];
-    for (const f of files) {
-      try { urls.push(await uploadImageFile(f)); } catch (err) { setUploadError(err); if (err instanceof SessionExpiredError) break; }
-    }
-    onChange([...items, ...urls]);
-    setBusy(false); onBusyChange?.(false);
-    e.target.value = '';
-  };
-  return (
-    <div>
-      <div className="adm-gallery-grid">
-        {items.map((g, i) => (
-          <div className="adm-gthumb" key={i}>
-            <img src={g} alt="" />
-            <button type="button" className="x" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label="Remove">
-              <I.close width="13" height="13" />
-            </button>
-          </div>
-        ))}
-        <button type="button" className="adm-gadd" onClick={() => fileRef.current.click()} disabled={busy}>
-          <I.plus /> {busy ? 'Processing…' : 'Add'}
-          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={addFiles} />
-        </button>
-      </div>
-      <div style={{ marginTop: 6 }}><UploadErrorNote error={uploadError} /></div>
-    </div>
-  );
-}
 
 function Repeater({ items, onChange, placeholder, textarea }) {
   const set = (i, v) => { const n = [...items]; n[i] = v; onChange(n); };
@@ -98,7 +60,6 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
     badge: start.badge || '',
     rating: start.rating != null ? String(start.rating) : '4.8',
     image: start.image || '',
-    gallery: start.gallery || [],
     description: start.description || '',
     about: (start.detail && start.detail.about && start.detail.about.length) ? start.detail.about : [''],
     highlights: (start.detail && start.detail.highlights && start.detail.highlights.length) ? start.detail.highlights : (start.features && start.features.length ? start.features : ['']),
@@ -133,7 +94,6 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
       badge: f.badge || null,
       rating: Math.max(0, Math.min(5, parseFloat(f.rating) || 4.8)),
       image: f.image || '',
-      gallery: f.gallery.filter(Boolean),
       description: f.description.trim() || `${f.name.trim()} — a Limitra-curated pick.`,
       features: clean(f.highlights).length ? clean(f.highlights) : ['Editor-selected and quality-checked'],
       highlights: clean(f.highlights),
@@ -220,10 +180,6 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
       <div className="adm-field">
         <label>Main image</label>
         <ImgInput value={f.image} onChange={(v) => set('image', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
-      </div>
-      <div className="adm-field">
-        <label>Gallery (detail-page thumbnails)</label>
-        <GalleryInput items={f.gallery} onChange={(v) => set('gallery', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
       </div>
 
       <div className="adm-section-title">Descriptions</div>

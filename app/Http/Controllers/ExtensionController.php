@@ -25,9 +25,9 @@ class ExtensionController extends Controller
     /**
      * Stores one fitted product image and hands back its real hosted URL — the basket page's
      * image-fit tool (canvas-cropped/padded client-side, see shared/imagefit.js) produces a
-     * Blob, not a URL, so it needs somewhere to land before it can go in a product's
-     * image/gallery field. Mirrors AdminController::uploadImage() exactly (same disk, same
-     * validation) but behind the extension's bearer token instead of admin session auth.
+     * Blob, not a URL, so it needs somewhere to land before it can go in a product's image
+     * field. Mirrors AdminController::uploadImage() exactly (same disk, same validation) but
+     * behind the extension's bearer token instead of admin session auth.
      */
     public function uploadImage(Request $request)
     {
@@ -121,8 +121,6 @@ class ExtensionController extends Controller
             'items.*.badge'           => 'nullable|string',
             'items.*.price'           => 'required|string',
             'items.*.image'           => 'nullable|string',
-            'items.*.images'          => 'nullable|array',
-            'items.*.images.*'        => 'nullable|string',
             'items.*.description'     => 'nullable|string',
             'items.*.about'           => 'nullable|array',
             'items.*.about.*'         => 'nullable|string',
@@ -151,7 +149,6 @@ class ExtensionController extends Controller
                         'retailer_id' => $retailer->id,
                         'affiliateUrl' => $item['url'],
                         'image'       => $item['image'] ?? null,
-                        'gallery'     => $item['images'] ?? [],
                         'badge'       => $item['badge'] ?? null,
                         'description' => $item['description'] ?? null,
                         'about'       => $item['about'] ?? [],
