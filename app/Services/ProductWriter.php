@@ -66,6 +66,7 @@ class ProductWriter
             'retailer_id' => $data['retailer_id'] ?? null,
             'affiliate_url' => $data['affiliateUrl'] ?? null,
             'image' => $data['image'] ?? null,
+            'gallery' => !empty($data['gallery']) ? array_values(array_filter($data['gallery'])) : null,
             'description' => ($data['description'] ?? '') ?: ($name . ' — a Limitra-curated pick.'),
             'badge' => ($data['badge'] ?? null) ?: null,
             'rating' => !empty($data['rating']) ? min(5, max(0, (float) $data['rating'])) : 4.8,

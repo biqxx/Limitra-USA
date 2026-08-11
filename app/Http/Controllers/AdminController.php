@@ -151,7 +151,7 @@ class AdminController extends Controller
             'features' => $p->features ?? [],
             'tags' => $p->tags ?? [],
             'description' => $p->description,
-            'gallery' => [],
+            'gallery' => $p->gallery ?? [],
             'detail' => $p->detail ? [
                 'about' => $p->detail->about ?? [],
                 'highlights' => $p->detail->highlights ?? [],
@@ -436,6 +436,7 @@ class AdminController extends Controller
             'retailer' => $request->retailer,
             'affiliate_url' => $request->affiliateUrl,
             'image' => $request->image,
+            'gallery' => array_values(array_filter($request->input('gallery', []))) ?: null,
             'description' => $request->description,
             'badge' => $request->badge ?: null,
             'rating' => $request->rating ? min(5, max(0, (float) $request->rating)) : $product->rating,

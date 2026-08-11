@@ -65,6 +65,7 @@ Route::middleware(['extension.token', 'throttle:60,1'])->prefix('api/extension')
     Route::get('/categories', [ExtensionController::class, 'categories'])->name('extension.categories');
     Route::post('/products/check-duplicates', [ExtensionController::class, 'checkDuplicates'])->name('extension.products.check-duplicates');
     Route::post('/products/upload', [ExtensionController::class, 'uploadProducts'])->name('extension.products.upload');
+    Route::post('/images/upload', [ExtensionController::class, 'uploadImage'])->name('extension.images.upload');
 });
 
 // Admin (protected)

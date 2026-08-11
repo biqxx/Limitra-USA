@@ -76,8 +76,11 @@ export default function Product() {
   const [quick, setQuick] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const gallery = [product?.image, ...(product?.gallery || [])].filter(Boolean);
+  const [activeImg, setActiveImg] = useState(0);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
+  useEffect(() => { setActiveImg(0); }, [product?.id]);
 
   const isSaved = saved.has(product?.id);
 
@@ -120,8 +123,23 @@ export default function Product() {
           <div className="pd-gallery">
             <div className="pd-main" style={{ aspectRatio: "3/4" }}>
               {product.badge && <span className="prod-badge">{product.badge}</span>}
-              {product.image && <img className="p-img" src={product.image} alt={product.name} />}
+              {gallery[activeImg] && <img className="p-img" src={gallery[activeImg]} alt={product.name} />}
             </div>
+            {gallery.length > 1 && (
+              <div className="pd-thumbs">
+                {gallery.map((src, i) => (
+                  <button
+                    key={src + i}
+                    type="button"
+                    className="pd-thumb"
+                    style={{ borderColor: i === activeImg ? "var(--accent)" : "transparent", padding: 0, cursor: "pointer" }}
+                    onClick={() => setActiveImg(i)}
+                  >
+                    <img className="p-img" src={src} alt={`${product.name} view ${i + 1}`} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pd-info">
