@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import I from './Icons';
 import { copyToClipboard } from '../lib/clipboard';
+import { formatPrice } from '../lib/price';
 
 // Deal CTA label, shown regardless of retailer.
 export function shopCta() {
@@ -44,7 +45,7 @@ export function ProductCard({ p, saved, onToggle, onQuick, dealCta, lead }) {
             <span className="prod-brand">{p.brand}</span>
             <h3 className="prod-name">{p.name}</h3>
           </div>
-          <span className="prod-price" style={{ whiteSpace: "nowrap", marginTop: 0 }}>{p.price}</span>
+          <span className="prod-price" style={{ whiteSpace: "nowrap", marginTop: 0 }}>{formatPrice(p.price)}</span>
         </div>
       </div>
       <div className="prod-actions">
@@ -164,7 +165,7 @@ export function QuickView({ product, saved, onToggle, onClose, dealCta }) {
           <span className="prod-brand">{product.brand}</span>
           <h2>{product.name}</h2>
           <div className="price-row">
-            <span className="prod-price">{product.price}</span>
+            <span className="prod-price">{formatPrice(product.price)}</span>
           </div>
           <p className="modal-desc">{product.description}</p>
           <ul className="feature-list">
@@ -219,7 +220,7 @@ export function SavedDrawer({ open, products, onClose, onToggle, onQuick }) {
                 <div className="info" onClick={() => onQuick(p)} style={{ cursor: "pointer" }}>
                   <span className="prod-brand">{p.brand}</span>
                   <h4>{p.name}</h4>
-                  <span className="prod-price">{p.price}</span>
+                  <span className="prod-price">{formatPrice(p.price)}</span>
                 </div>
                 <button className="remove" onClick={() => onToggle(p.id)} aria-label="Remove"><I.trash /></button>
               </div>

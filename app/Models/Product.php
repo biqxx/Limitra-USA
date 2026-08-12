@@ -42,6 +42,20 @@ class Product extends Model
             ->withTimestamps();
     }
 
+    /**
+     * Prices are stored as free-form strings, not a decimal column — the admin form already
+     * prepends "$" itself when saving unless the value already carries some other currency
+     * symbol (see ProductsView.jsx's submit()). Sources that bypass that form (bulk import,
+     * the ProductPicker extension, which deliberately uploads a bare stripped number) don't
+     * get that treatment, so this mirrors the same rule at display time: only a purely
+     * numeric price (digits/comma/dot, no symbol at all) gets "$" added.
+     */
+    private function displayPrice(): string
+    {
+        $price = trim((string) $this->price);
+        return ($price !== '' && preg_match('/^[0-9.,]+$/', $price)) ? '$' . $price : $price;
+    }
+
     public function toFrontend(): array
     {
         return [
@@ -49,7 +63,7 @@ class Product extends Model
             'slug' => $this->slug,
             'name' => $this->name,
             'brand' => $this->brand,
-            'price' => $this->price,
+            'price' => $this->displayPrice(),
             'description' => $this->description,
             'image' => $this->image,
             'affiliate_url' => $this->affiliate_url,

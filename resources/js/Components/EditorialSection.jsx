@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import I from './Icons';
 import { TAG_COLORS } from '../constants';
+import { formatPrice } from '../lib/price';
 
 function tagColor(tag) {
   return TAG_COLORS[tag] || 'var(--accent)';
@@ -103,7 +104,7 @@ export function ArtProduct({ p }) {
       <div className="ap-body">
         <div className="ap-brand">{p.brand}</div>
         <div className="ap-name">{p.name}</div>
-        <div className="ap-price">{p.price}</div>
+        <div className="ap-price">{formatPrice(p.price)}</div>
         <span className="ap-cta">Buy Now →</span>
       </div>
     </Link>

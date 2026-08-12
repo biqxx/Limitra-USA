@@ -5,6 +5,7 @@ import Seo from '../Components/Seo';
 import I from '../Components/Icons';
 import { ProductRow, QuickView, SavedDrawer, ShareRow, shopCta } from '../Components/ProductCard';
 import { copyToClipboard } from '../lib/clipboard';
+import { formatPrice } from '../lib/price';
 import useSaved from '../hooks/useSaved';
 
 function StyleTheLookPreview({ product, looks, productsMap }) {
@@ -128,7 +129,7 @@ export default function Product() {
             <span className="prod-brand">{product.brand}</span>
             <h1>{product.name}</h1>
             <div className="pd-price-row">
-              <span className="pd-price">{product.price}</span>
+              <span className="pd-price">{formatPrice(product.price)}</span>
 
             </div>
             <p className="pd-lead">{product.description}</p>

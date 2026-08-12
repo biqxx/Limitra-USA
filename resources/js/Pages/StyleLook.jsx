@@ -4,6 +4,7 @@ import Layout from '../Components/Layout';
 import Seo from '../Components/Seo';
 import I from '../Components/Icons';
 import { SavedDrawer } from '../Components/ProductCard';
+import { formatPrice } from '../lib/price';
 import useSaved from '../hooks/useSaved';
 
 function StlProd({ p }) {
@@ -16,7 +17,7 @@ function StlProd({ p }) {
       <div className="stl-prod-info">
         <span className="stl-brand-name">{p.brand}</span>
         <span className="stl-prod-name">{p.name}</span>
-        <span className="stl-prod-price">{p.price}</span>
+        <span className="stl-prod-price">{formatPrice(p.price)}</span>
       </div>
       <div className="stl-view-link"><span>Buy Now →</span></div>
     </Link>
@@ -43,7 +44,7 @@ function ConfigGridMosaic({ items, productsMap }) {
                 <div className="stl-prod-info">
                   <span className="stl-brand-name">{p.brand}</span>
                   <span className="stl-prod-name">{p.name}</span>
-                  <span className="stl-prod-price">{p.price}</span>
+                  <span className="stl-prod-price">{formatPrice(p.price)}</span>
                 </div>
                 <div className="stl-view-link"><span>Buy Now →</span></div>
               </>
