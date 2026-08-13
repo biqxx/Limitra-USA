@@ -501,6 +501,20 @@ section { padding-block: clamp(48px, 6vw, 84px); }
    Product cards
    ============================================================ */
 .prod-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+
+/* horizontal-scroll variant (ProductRow's `scroll` prop) — same snap-scroll pattern as the
+   homepage's .vid-scroll video carousel, just with .prod-card instead of a video thumb. Each
+   item gets a fixed width since .prod-card itself has no intrinsic width outside a grid track,
+   and .prod-image's height switches to auto so its existing aspect-ratio (3/4) actually takes
+   effect instead of being overridden by the grid layout's fixed 540px height. */
+.prod-scroll-outer { overflow: hidden; width: 100%; }
+.prod-scroll {
+  display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 6px;
+}
+.prod-scroll::-webkit-scrollbar { display: none; }
+.prod-scroll-item { flex: none; width: 260px; scroll-snap-align: start; }
+.prod-scroll-item .prod-image { height: auto; }
 .prod-card {
   position: relative; background: var(--surface); border: 1.5px solid var(--line);
   border-radius: 16px; overflow: hidden; transition: box-shadow .3s, transform .3s;

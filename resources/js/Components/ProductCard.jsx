@@ -56,7 +56,11 @@ export function ProductCard({ p, saved, onToggle, onQuick, dealCta, lead }) {
   );
 }
 
-export function ProductRow({ id, eyebrow, title, sub, items, savedSet, onToggle, onQuick, dealCta }) {
+// `scroll` swaps the grid layout for a horizontal, snap-scrolling strip (same pattern as the
+// homepage's video carousel — see .prod-scroll* in app.css) — for rows like "More to
+// discover" where the list is a random sample rather than a fixed curated set, so a grid's
+// fixed row count would clip items instead of just letting people scroll for more.
+export function ProductRow({ id, eyebrow, title, sub, items, savedSet, onToggle, onQuick, dealCta, scroll }) {
   return (
     <section className="wrap" id={id}>
       <div className="section-head">
@@ -64,11 +68,23 @@ export function ProductRow({ id, eyebrow, title, sub, items, savedSet, onToggle,
         <h2>{title}</h2>
         {sub && <p>{sub}</p>}
       </div>
-      <div className="prod-grid">
-        {items.map((p, i) => (
-          <ProductCard key={p.id} p={p} saved={savedSet.has(p.id)} onToggle={onToggle} onQuick={onQuick} dealCta={dealCta} lead={i === 0} />
-        ))}
-      </div>
+      {scroll ? (
+        <div className="prod-scroll-outer">
+          <div className="prod-scroll">
+            {items.map((p, i) => (
+              <div className="prod-scroll-item" key={p.id}>
+                <ProductCard p={p} saved={savedSet.has(p.id)} onToggle={onToggle} onQuick={onQuick} dealCta={dealCta} lead={i === 0} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="prod-grid">
+          {items.map((p, i) => (
+            <ProductCard key={p.id} p={p} saved={savedSet.has(p.id)} onToggle={onToggle} onQuick={onQuick} dealCta={dealCta} lead={i === 0} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

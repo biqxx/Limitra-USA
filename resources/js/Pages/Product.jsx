@@ -190,7 +190,7 @@ export default function Product() {
       <StyleTheLookPreview product={product} looks={looks} />
 
       <ProductRow id="related" eyebrow="You may also like" title="More to discover"
-        items={relatedProducts || []} savedSet={saved} onToggle={toggle} onQuick={setQuick} dealCta="Buy Now" />
+        items={relatedProducts || []} savedSet={saved} onToggle={toggle} onQuick={setQuick} dealCta="Buy Now" scroll />
 
       <QuickView product={quick} saved={quick ? saved.has(quick.id) : false}
         onToggle={toggle} onClose={() => setQuick(null)} dealCta="View Deal" />
