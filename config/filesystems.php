@@ -41,7 +41,13 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            // Deliberately root-relative, NOT prefixed with APP_URL — every uploaded
+            // image/video URL gets stored straight into the database (products.image,
+            // categories.img, etc.), so baking in an absolute domain here means every one of
+            // those rows breaks the moment the site's domain/IP ever changes. A root-relative
+            // "/storage/..." URL always resolves against whatever domain is currently serving
+            // the page, so it survives a domain change with zero data migration needed.
+            'url' => '/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

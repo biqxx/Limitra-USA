@@ -7,7 +7,12 @@ const DEFAULT_IMG = 'https://images.unsplash.com/photo-1483985988355-763728e1935
 export default function Seo({ title, description, image, type = 'website', noIndex = false }) {
   const fullTitle = title ? `${title} — ${SITE}` : SITE;
   const desc = ((description || DEFAULT_DESC).replace(/<[^>]+>/g, '')).slice(0, 160);
-  const img = image || DEFAULT_IMG;
+  // Uploaded images are stored as root-relative "/storage/..." URLs (see filesystems.php) so
+  // they survive a domain change untouched — but og:image/twitter:image specifically need a
+  // fully-qualified URL for link-preview crawlers to fetch it. Resolve against the current
+  // origin at render time rather than baking in a domain, so this never goes stale either.
+  const rawImg = image || DEFAULT_IMG;
+  const img = typeof window !== 'undefined' && rawImg.startsWith('/') ? `${window.location.origin}${rawImg}` : rawImg;
 
   return (
     <Head>
