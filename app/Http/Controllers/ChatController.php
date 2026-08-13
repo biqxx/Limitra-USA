@@ -274,6 +274,18 @@ class ChatController extends Controller
     }
 
     /**
+     * Deletes the authenticated user's entire persisted chat thread — "Clear chat" only ever
+     * cleared local React state/localStorage, which did nothing for a logged-in user's
+     * server-side history, so it silently came back on the next reload/merge.
+     */
+    public function clear(Request $request)
+    {
+        $request->user()->chatMessages()->delete();
+
+        return response()->json(['cleared' => true]);
+    }
+
+    /**
      * One-shot guest→account chat seeding. Only seeds if the account has no prior
      * messages yet — a repeat login from any guest session must never duplicate history.
      */

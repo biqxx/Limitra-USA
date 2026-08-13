@@ -56,6 +56,7 @@ Route::middleware('auth')->prefix('api')->group(function () {
     Route::post('/favorites/toggle', [FavoriteController::class, 'toggle'])->name('favorites.toggle');
     Route::post('/favorites/merge', [FavoriteController::class, 'merge'])->name('favorites.merge');
     Route::get('/chat/history', [ChatController::class, 'history'])->name('chat.history');
+    Route::delete('/chat/history', [ChatController::class, 'clear'])->name('chat.clear');
     Route::post('/chat/merge', [ChatController::class, 'merge'])->name('chat.merge');
 });
 

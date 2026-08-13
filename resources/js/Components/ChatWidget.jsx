@@ -326,6 +326,17 @@ function ChatPanel({ onClose, catalog, onMouseDown }) {
     setHistory([]);
     localStorage.removeItem(CHAT_STORAGE);
     localStorage.removeItem(LAST_ACTIVITY_STORAGE);
+
+    // A logged-in user's history lives server-side (chatMessages table), not localStorage —
+    // clearing only the local state left the old thread waiting to reappear on the next
+    // reload/merge. Fire-and-forget: even if this fails, local state is already cleared, and
+    // the user can retry by clicking again.
+    if (user) {
+      fetch('/api/chat/history', {
+        method: 'DELETE',
+        headers: { 'X-CSRF-TOKEN': getCsrfToken() },
+      }).catch(() => {});
+    }
   };
 
   return (
