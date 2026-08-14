@@ -114,9 +114,16 @@ export function CategoryGrid({ categories }) {
 
 export function ShareRow({ product }) {
   const [toast, setToast] = useState(null);
-  const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/product/${product.slug || product.id}` : `/product/${product.slug || product.id}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const baseUrl = `${origin}/product/${product.slug || product.id}`;
   const text = `${product.name} by ${product.brand} — found on Limitra`;
   const enc = encodeURIComponent;
+  // Pinterest's "media" param is fetched by Pinterest's own servers, not the visitor's browser
+  // — a root-relative "/storage/..." image path (see filesystems.php) resolves fine on-page,
+  // but means nothing off-site, so it needs the same absolute-URL treatment as the page link.
+  const absoluteImage = product.image
+    ? (product.image.startsWith('/') ? `${origin}${product.image}` : product.image)
+    : null;
 
   // Tags the link with which channel it was shared through, so traffic landing back on
   // this product page can be attributed to the specific social platform it came from.
@@ -129,12 +136,32 @@ export function ShareRow({ product }) {
     setTimeout(() => setToast(null), 1800);
   };
 
+  // Instagram and TikTok have no public web "share" URL the way Facebook/X/Pinterest do —
+  // clicking those used to just copy the link with no real path into either app, which reads
+  // as "the button doesn't work". Where the OS supports it (mobile Chrome/Safari, some
+  // desktop browsers), the native Web Share sheet lists the actual installed apps — Instagram
+  // Stories/DM, TikTok, WhatsApp, Messages, etc. — as real share destinations. Falls back to
+  // the old copy+toast behavior wherever navigator.share isn't available (most desktops), and
+  // on any share failure that isn't the user simply cancelling the sheet.
+  const shareOrCopy = async (t) => {
+    const url = socialUrl(t.key);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: product.name, text, url });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // user closed the share sheet — not a failure
+      }
+    }
+    await copyUrl(url, t.copy);
+  };
+
   const targets = [
     { key: "facebook",  label: "Facebook",  href: `https://www.facebook.com/sharer/sharer.php?u=${enc(socialUrl('facebook'))}` },
     { key: "instagram", label: "Instagram", copy: "Copied — paste in Instagram" },
     { key: "tiktok",    label: "TikTok",    copy: "Copied — paste in TikTok" },
     { key: "x",         label: "X",         href: `https://twitter.com/intent/tweet?url=${enc(socialUrl('x'))}&text=${enc(text)}` },
-    { key: "pinterest", label: "Pinterest", href: `https://pinterest.com/pin/create/button/?url=${enc(socialUrl('pinterest'))}&description=${enc(text)}` },
+    { key: "pinterest", label: "Pinterest", href: `https://pinterest.com/pin/create/button/?url=${enc(socialUrl('pinterest'))}&description=${enc(text)}${absoluteImage ? `&media=${enc(absoluteImage)}` : ''}` },
   ];
 
   return (
@@ -144,7 +171,7 @@ export function ShareRow({ product }) {
       {targets.map((t) => {
         const Icon = I[t.key];
         return t.copy ? (
-          <button className="share-btn" key={t.key} onClick={() => copyUrl(socialUrl(t.key), t.copy)} aria-label={`Share on ${t.label}`} title={t.label}>
+          <button className="share-btn" key={t.key} onClick={() => shareOrCopy(t)} aria-label={`Share on ${t.label}`} title={t.label}>
             <Icon />
           </button>
         ) : (
