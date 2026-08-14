@@ -10,7 +10,9 @@ class StyleLookController extends Controller
 {
     public function index()
     {
-        $looks = Look::all();
+        // Newest first — the gallery page gives the first item a large featured treatment,
+        // so this ordering is what actually decides which look gets featured.
+        $looks = Look::orderByDesc('created_at')->get();
 
         return Inertia::render('StyleLooks', [
             'looks' => $looks,

@@ -1472,6 +1472,58 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .stl-gallery-card .gc-cta { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; font-size: 13px; font-weight: 600; color: var(--brand); letter-spacing: .04em; }
 .stl-gallery-card .gc-cta:hover { color: var(--accent); }
 
+/* ── Gallery listing redesign (/looks only) — featured hero + tighter grid below.
+   Deliberately its own class names (stl-gal-*), not a restyle of .stl-gallery-card/.gc-*
+   above — the detail page's "More Looks" section reuses that older card as-is, and this
+   redesign was scoped to the listing page only. ── */
+.stl-gal-hero {
+  position: relative; display: block; border-radius: 18px; overflow: hidden;
+  margin-bottom: 36px; background: var(--card);
+}
+.stl-gal-hero-photo { aspect-ratio: 21 / 8; overflow: hidden; }
+.stl-gal-hero-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s ease; display: block; }
+.stl-gal-hero:hover .stl-gal-hero-photo img { transform: scale(1.03); }
+.stl-gal-hero-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end;
+  padding: clamp(20px, 4vw, 44px); color: #fff;
+  background: linear-gradient(0deg, rgba(10,12,18,.82) 0%, rgba(10,12,18,.35) 45%, rgba(10,12,18,0) 75%);
+}
+.stl-gal-eyebrow { font-size: 11px; letter-spacing: .26em; text-transform: uppercase; color: var(--accent-soft); font-weight: 700; margin-bottom: 10px; }
+.stl-gal-hero-title { font-family: var(--font-display,"Bodoni Moda"),serif; font-weight: 400; font-size: clamp(28px, 4vw, 44px); color: #fff; margin: 0 0 6px; line-height: 1.05; }
+.stl-gal-hero-title em { font-style: italic; }
+.stl-gal-hero-event { font-size: clamp(15px, 1.6vw, 18px); font-weight: 600; color: #fff; margin: 0 0 10px; }
+
+.stl-gal-tags { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .85; margin-bottom: 14px; }
+.stl-gal-tags .dot { color: var(--accent-soft); margin: 0 7px; }
+.stl-gal-palette { display: flex; align-items: center; gap: 7px; margin-bottom: 16px; }
+.stl-gal-swatch { width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.3); flex: none; }
+.stl-gal-swatch.sm { width: 13px; height: 13px; }
+.stl-gal-cta { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: #fff; letter-spacing: .04em; width: fit-content; }
+.stl-gal-hero:hover .stl-gal-cta { color: var(--accent-soft); }
+
+.stl-gal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; padding-bottom: clamp(36px, 5vw, 60px); }
+.stl-gal-card { position: relative; display: block; border-radius: 14px; overflow: hidden; background: var(--card); transition: box-shadow .3s; }
+.stl-gal-card:hover { box-shadow: 0 20px 40px -20px rgba(20,25,40,.4); }
+.stl-gal-card-photo { aspect-ratio: 3 / 4; overflow: hidden; }
+.stl-gal-card-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s; display: block; }
+.stl-gal-card:hover .stl-gal-card-photo img { transform: scale(1.05); }
+.stl-gal-card-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 16px 18px; color: #fff;
+  background: linear-gradient(0deg, rgba(10,12,18,.78) 0%, rgba(10,12,18,.15) 55%, rgba(10,12,18,0) 78%);
+}
+.stl-gal-card-event { font-family: var(--font-display,"Bodoni Moda"),serif; font-weight: 400; font-size: 18px; color: #fff; margin: 0 0 6px; line-height: 1.15; }
+
+@media (max-width: 980px) {
+  .stl-gal-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 900px) {
+  .stl-gal-hero-photo { aspect-ratio: 4 / 5; }
+}
+@media (max-width: 640px) {
+  .stl-gal-grid { grid-template-columns: 1fr; }
+}
+
 /* Full look detail card */
 .stl-look-card { background: #f7f1ec; border-radius: 16px; overflow: hidden; }
 
