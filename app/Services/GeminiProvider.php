@@ -24,6 +24,13 @@ class GeminiProvider implements AiProvider
     /** Statuses worth retrying the next model for — overload/rate-limit, not real errors. */
     private const RETRYABLE_STATUSES = [503, 429];
 
+    /** Models that accept thinkingConfig — lite/standard models reject it with "invalid argument". */
+    private const THINKING_MODELS = [
+        'gemini-3.5-flash',
+        'gemini-2.5-flash',
+        'gemini-2.5-pro',
+    ];
+
     /** Gemini's own default cache lifetime is 60 min; ours is a little shorter so we never hand out a name it has just expired. */
     private const CACHE_TTL_SECONDS = 3540;
 
@@ -146,9 +153,13 @@ class GeminiProvider implements AiProvider
             'generationConfig' => ['maxOutputTokens' => $maxTokens],
         ];
 
-        // Disable thinking for simple/fast calls (e.g. intent classification)
+        // Disable thinking for simple/fast calls (e.g. intent classification).
+        // Only send thinkingConfig to models that actually support it — lite models
+        // reject it with "invalid argument".
         if (!$thinking) {
-            $body['generationConfig']['thinkingConfig'] = ['thinkingBudget' => 0];
+            if (in_array($model ?? self::INTENT_FALLBACK_MODELS[0], self::THINKING_MODELS, true)) {
+                $body['generationConfig']['thinkingConfig'] = ['thinkingBudget' => 0];
+            }
         }
 
         // Force valid JSON output (e.g. for the scanning-phase classifier call) instead of
@@ -295,8 +306,16 @@ class GeminiProvider implements AiProvider
             $next = $models[$i + 1] ?? null;
             $url  = $this->modelUrl($model, 'streamGenerateContent', $key) . '&alt=sse';
 
+            // thinkingBudget: 0 — prevents thinking-capable models from silently spending
+            // output tokens on invisible reasoning, which was cutting visible replies short.
+            // Only sent to models that support thinkingConfig; lite models reject it.
+            $body = $baseBody;
+            if (in_array($model, self::THINKING_MODELS, true)) {
+                $body['generationConfig']['thinkingConfig'] = ['thinkingBudget' => 0];
+            }
+
             $cacheName = $this->getOrCreateCache($model, $system);
-            $bodyJson  = json_encode($baseBody + ($cacheName ? ['cachedContent' => $cacheName] : $inline));
+            $bodyJson  = json_encode($body + ($cacheName ? ['cachedContent' => $cacheName] : $inline));
 
             $attempt = $this->curlStreamAttempt($url, $bodyJson, $onChunk);
 
@@ -305,7 +324,7 @@ class GeminiProvider implements AiProvider
             // retry this same model once with the system prompt sent inline before giving up.
             if (!($attempt['statusCode'] >= 200 && $attempt['statusCode'] < 300 && !$attempt['curlError']) && $cacheName) {
                 $this->invalidateCache($model, $system);
-                $bodyJson = json_encode($baseBody + $inline);
+                $bodyJson = json_encode($body + $inline);
                 $attempt  = $this->curlStreamAttempt($url, $bodyJson, $onChunk);
             }
 
