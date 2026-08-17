@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
 import I from '../Icons';
 import { TAG_OPTS } from '../../constants';
@@ -11,6 +11,72 @@ function extractYouTubeId(str) {
   if (m) return m[1];
   if (/^[a-zA-Z0-9_-]{11}$/.test(str.trim())) return str.trim();
   return '';
+}
+
+function fetchYouTubeDuration(id, callback) {
+  if (!id) return;
+  const loadScriptAndGetYT = (cb) => {
+    if (window.YT && window.YT.Player) {
+      cb();
+      return;
+    }
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+    const interval = setInterval(() => {
+      if (window.YT && window.YT.Player) {
+        clearInterval(interval);
+        cb();
+      }
+    }, 100);
+    setTimeout(() => clearInterval(interval), 10000);
+  };
+
+  loadScriptAndGetYT(() => {
+    const tempDiv = document.createElement('div');
+    tempDiv.id = `yt-temp-player-${id}`;
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.top = '-9999px';
+    tempDiv.style.left = '-9999px';
+    tempDiv.style.width = '0px';
+    tempDiv.style.height = '0px';
+    document.body.appendChild(tempDiv);
+
+    let player = new window.YT.Player(tempDiv.id, {
+      videoId: id,
+      playerVars: {
+        autoplay: 0,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        showinfo: 0,
+        rel: 0
+      },
+      events: {
+        onReady: (event) => {
+          const s = Math.round(event.target.getDuration());
+          if (!isNaN(s) && s > 0) {
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            const formatted = h > 0 
+              ? `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+              : `${m}:${sec.toString().padStart(2, '0')}`;
+            callback(formatted);
+          }
+          try { event.target.destroy(); } catch (_) {}
+          tempDiv.remove();
+        },
+        onError: () => {
+          try { player.destroy(); } catch (_) {}
+          tempDiv.remove();
+        }
+      }
+    });
+  });
 }
 
 function VideoEditor({ initial, products, onCancel, onSave }) {
@@ -37,10 +103,13 @@ function VideoEditor({ initial, products, onCancel, onSave }) {
     setYtInput(val);
     const id = extractYouTubeId(val);
     setYtId(id);
-    if (id && !thumb) setThumb(`https://img.youtube.com/vi/${id}/hqdefault.jpg`);
+    if (id) {
+      setThumb(`https://img.youtube.com/vi/${id}/hqdefault.jpg`);
+      fetchYouTubeDuration(id, setDuration);
+    }
   };
 
-  const captureThumb = (url) => {
+  const captureThumb = (url, force = false) => {
     try {
       const vid = document.createElement('video');
       vid.crossOrigin = 'anonymous';
@@ -59,11 +128,24 @@ function VideoEditor({ initial, products, onCancel, onSave }) {
           canvas.height = vid.videoHeight || 720;
           canvas.getContext('2d').drawImage(vid, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          setThumb((prev) => prev || dataUrl);
+          if (force) {
+            setThumb(dataUrl);
+          } else {
+            setThumb((prev) => prev || dataUrl);
+          }
         } catch (_) {}
       };
     } catch (_) {}
   };
+
+  useEffect(() => {
+    if (mode === 'upload' && videoUrl && videoUrl.startsWith('http')) {
+      const timer = setTimeout(() => {
+        captureThumb(videoUrl, false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [videoUrl, mode]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -84,7 +166,7 @@ function VideoEditor({ initial, products, onCancel, onSave }) {
         try {
           const data = JSON.parse(xhr.responseText);
           setVideoUrl(data.url);
-          captureThumb(data.url);
+          captureThumb(data.url, true);
         } catch (_) { setErr('Upload response invalid.'); }
       } else if (xhr.status === 419) {
         handleSessionExpired();

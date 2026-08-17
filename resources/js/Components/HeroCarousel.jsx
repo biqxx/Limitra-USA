@@ -10,6 +10,54 @@ const FALLBACK_SLIDES = [
 
 const DURATION = 6000;
 
+/** Individual slide background — handles both image and video. */
+function SlideBg({ slide, isActive, isLeaving, onVideoEnded }) {
+  const videoRef = useRef(null);
+
+  // Play/pause the video whenever active state changes
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (isActive) {
+      v.currentTime = 0;
+      v.play().catch(() => {});
+    } else {
+      v.pause();
+    }
+  }, [isActive]);
+
+  const cls = `hero-slide-bg${isActive ? ' active' : ''}${isLeaving ? ' leaving' : ''}`;
+
+  if (slide.video) {
+    return (
+      <div className={cls}>
+        <video
+          ref={videoRef}
+          src={slide.video}
+          muted
+          playsInline
+          loop={!onVideoEnded}   // loop only when we're NOT listening for end
+          onEnded={onVideoEnded}
+          preload="metadata"
+          aria-hidden="true"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={cls}>
+      {slide.image && (
+        <img
+          src={slide.image}
+          alt={slide.alt || ''}
+          fetchpriority={isActive ? 'high' : 'auto'}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function HeroCarousel({ slides, settings = {} }) {
   const allSlides = (slides && slides.length) ? slides : FALLBACK_SLIDES;
   const [current, setCurrent] = useState(0);
@@ -18,21 +66,35 @@ export default function HeroCarousel({ slides, settings = {} }) {
   const timerRef = useRef(null);
   const progressRef = useRef(null);
 
+  const currentSlide = allSlides[current] || allSlides[0];
+  const isVideoSlide = !!currentSlide.video;
+
+  const advance = (idx) => {
+    clearTimeout(timerRef.current);
+    clearInterval(progressRef.current);
+    const next = (idx + 1) % allSlides.length;
+    setPrev(idx);
+    setCurrent(next);
+    setProgress(0);
+    setTimeout(() => setPrev(null), 800);
+  };
+
   const startTimers = (idx) => {
     clearTimeout(timerRef.current);
     clearInterval(progressRef.current);
     if (allSlides.length <= 1) return;
+
+    const slide = allSlides[idx];
+    // For video slides, don't run the progress timer — the video drives timing.
+    if (slide.video) return;
+
     const start = Date.now();
     progressRef.current = setInterval(() => {
       setProgress(Math.min(((Date.now() - start) / DURATION) * 100, 100));
     }, 40);
     timerRef.current = setTimeout(() => {
       clearInterval(progressRef.current);
-      const next = (idx + 1) % allSlides.length;
-      setPrev(idx);
-      setCurrent(next);
-      setProgress(0);
-      setTimeout(() => setPrev(null), 800);
+      advance(idx);
     }, DURATION);
   };
 
@@ -67,15 +129,17 @@ export default function HeroCarousel({ slides, settings = {} }) {
   return (
     <section className="hero">
 
-      {/* Background images with crossfade + Ken Burns */}
+      {/* Background images / videos with crossfade + Ken Burns */}
       <div className="hero-bg">
         {allSlides.map((s, idx) => (
-          <div
+          <SlideBg
             key={s.id || idx}
-            className={`hero-slide-bg${idx === current ? ' active' : ''}${idx === prev ? ' leaving' : ''}`}
-          >
-            {s.image && <img src={s.image} alt={s.alt || ''} fetchpriority={idx === 0 ? 'high' : 'auto'} />}
-          </div>
+            slide={s}
+            isActive={idx === current}
+            isLeaving={idx === prev}
+            // When a video slide ends, advance to the next slide
+            onVideoEnded={s.video && allSlides.length > 1 ? () => advance(idx) : null}
+          />
         ))}
       </div>
 
@@ -124,10 +188,18 @@ export default function HeroCarousel({ slides, settings = {} }) {
               {allSlides.map((s, idx) => (
                 <button key={idx} className="hero-bar-btn" onClick={() => goTo(idx)} aria-label={`Slide ${idx + 1}`}>
                   <div className="hero-bar">
-                    <div
-                      className="hero-bar-fill"
-                      style={{ width: idx < current ? '100%' : idx === current ? progress + '%' : '0%' }}
-                    />
+                    {/* Video slides show a solid full bar to indicate it's video-driven */}
+                    {s.video ? (
+                      <div
+                        className="hero-bar-fill"
+                        style={{ width: idx <= current ? '100%' : '0%', opacity: idx === current ? 1 : 0.4 }}
+                      />
+                    ) : (
+                      <div
+                        className="hero-bar-fill"
+                        style={{ width: idx < current ? '100%' : idx === current ? progress + '%' : '0%' }}
+                      />
+                    )}
                   </div>
                 </button>
               ))}
@@ -135,6 +207,14 @@ export default function HeroCarousel({ slides, settings = {} }) {
           </>
         )}
       </div>
+
+      {/* Video badge indicator */}
+      {isVideoSlide && (
+        <div className="hero-video-badge" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          Video
+        </div>
+      )}
 
       {/* Scroll cue */}
       <div className="hero-scroll-cue" aria-hidden="true">

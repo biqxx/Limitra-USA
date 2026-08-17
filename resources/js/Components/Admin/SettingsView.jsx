@@ -10,7 +10,7 @@ function HeroSlidesEditor({ value, onChange, onBusyChange }) {
   useEffect(() => { onBusyChange?.(imgBusy); }, [imgBusy]);
   const commit = (next) => { setSlides(next); onChange(JSON.stringify(next)); };
   const setField = (i, k, v) => commit(slides.map((s, idx) => idx === i ? { ...s, [k]: v } : s));
-  const add = () => commit([...slides, { image: '', alt: '', eyebrow: '', title: '', subtitle: '', cta_text: '', cta_url: '', cta2_text: '', cta2_url: '' }]);
+  const add = () => commit([...slides, { type: 'image', image: '', video: '', alt: '', eyebrow: '', title: '', subtitle: '', cta_text: '', cta_url: '', cta2_text: '', cta2_url: '' }]);
   const remove = (i) => commit(slides.filter((_, idx) => idx !== i));
   const move = (i, dir) => {
     const next = [...slides]; const j = i + dir;
@@ -35,7 +35,39 @@ function HeroSlidesEditor({ value, onChange, onBusyChange }) {
             </div>
           </div>
           <div style={{ padding: 16 }}>
-            <ImgInput label="Slide image" value={slide.image} onChange={(v) => setField(i, 'image', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+            {/* Slide type toggle */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Slide type:</span>
+              {['image', 'video'].map(t => (
+                <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                  <input
+                    type="radio"
+                    name={`slide-type-${i}`}
+                    value={t}
+                    checked={(slide.type || 'image') === t}
+                    onChange={() => setField(i, 'type', t)}
+                  />
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </label>
+              ))}
+            </div>
+            {/* Image or Video input depending on type */}
+            {(slide.type || 'image') === 'video' ? (
+              <div className="adm-field">
+                <label>Video URL <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(direct link to .mp4 / .webm)</span></label>
+                <input
+                  className="adm-input"
+                  value={slide.video || ''}
+                  onChange={(e) => setField(i, 'video', e.target.value)}
+                  placeholder="https://example.com/hero.mp4"
+                />
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--muted)' }}>
+                  The video will autoplay muted with no controls. It advances to the next slide when it ends.
+                </p>
+              </div>
+            ) : (
+              <ImgInput label="Slide image" value={slide.image} onChange={(v) => setField(i, 'image', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+            )}
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div className="adm-grid2">
                 <div className="adm-field">
