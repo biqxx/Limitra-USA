@@ -11,14 +11,14 @@ class GeminiProvider implements AiProvider
 {
     /** Ordered fallback chain for the intent-classification call. */
     private const INTENT_FALLBACK_MODELS = [
-        'gemini-2.0-flash-lite',
-        'gemini-2.0-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
     ];
 
     /** Ordered fallback chain for the customer-facing streamed reply. */
     private const REPLY_FALLBACK_MODELS = [
-        'gemini-2.0-flash-lite',
-        'gemini-2.0-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
     ];
 
     /** Statuses worth retrying the next model for — overload/rate-limit, not real errors. */
