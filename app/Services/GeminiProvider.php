@@ -153,15 +153,6 @@ class GeminiProvider implements AiProvider
             'generationConfig' => ['maxOutputTokens' => $maxTokens],
         ];
 
-        // Disable thinking for simple/fast calls (e.g. intent classification).
-        // Only send thinkingConfig to models that actually support it — lite models
-        // reject it with "invalid argument".
-        if (!$thinking) {
-            if (in_array($model ?? self::INTENT_FALLBACK_MODELS[0], self::THINKING_MODELS, true)) {
-                $body['generationConfig']['thinkingConfig'] = ['thinkingBudget' => 0];
-            }
-        }
-
         // Force valid JSON output (e.g. for the scanning-phase classifier call) instead of
         // relying on regex-scraping possibly-fenced free text out of the response.
         if ($responseSchema !== null) {
@@ -175,8 +166,13 @@ class GeminiProvider implements AiProvider
         foreach ($models as $i => $model) {
             $next = $models[$i + 1] ?? null;
 
+            $modelBody = $body;
+            if (!$thinking && in_array($model, self::THINKING_MODELS, true)) {
+                $modelBody['generationConfig']['thinkingConfig'] = ['thinkingBudget' => 0];
+            }
+
             try {
-                $res = $this->sendWithCacheFallback($model, $key, $body, $system);
+                $res = $this->sendWithCacheFallback($model, $key, $modelBody, $system);
             } catch (\Illuminate\Http\Client\ConnectionException $e) {
                 // Timeout / connection failure — not an HTTP status, but still retryable.
                 $lastError = $e->getMessage();
@@ -293,7 +289,6 @@ class GeminiProvider implements AiProvider
             'generationConfig' => [
                 'maxOutputTokens' => $maxTokens,
                 'temperature'     => 0.3,
-                'thinkingConfig'  => ['thinkingBudget' => 0],
             ],
         ];
         $inline = ['system_instruction' => ['parts' => [['text' => $system]]]];
