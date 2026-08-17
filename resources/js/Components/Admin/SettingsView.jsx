@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router } from '@inertiajs/react';
 import I from '../Icons';
-import { useUploadBusy, ImgInput, postJSON } from './AdminShared';
+import { useUploadBusy, ImgInput, VideoInput, postJSON } from './AdminShared';
 
 function HeroSlidesEditor({ value, onChange, onBusyChange }) {
   const parse = (v) => { try { return JSON.parse(v || '[]'); } catch (e) { return []; } };
@@ -24,93 +24,139 @@ function HeroSlidesEditor({ value, onChange, onBusyChange }) {
           No slides yet. Add one below. Leave text fields blank to use the global defaults from the "Hero defaults" panel.
         </p>
       )}
-      {slides.map((slide, i) => (
-        <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--surface-alt, #f7f6f4)', borderBottom: '1px solid var(--line)' }}>
-            <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--brand)' }}>Slide {i + 1}</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => move(i, -1)} disabled={i === 0} title="Move up">↑</button>
-              <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => move(i, 1)} disabled={i === slides.length - 1} title="Move down">↓</button>
-              <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => remove(i)} style={{ color: '#c0392b' }}>Remove</button>
+      {slides.map((slide, i) => {
+        const isVideo = (slide.type || (slide.video ? 'video' : 'image')) === 'video';
+        return (
+          <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            {/* Header styled with Hero Carousel dark brand aesthetics */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#0d1b2a', color: '#fff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, letterSpacing: '0.05em', color: 'var(--accent, #d4af37)' }}>
+                  {String(i + 1).padStart(2, '0')} <span style={{ opacity: 0.4 }}>/</span> {String(slides.length).padStart(2, '0')}
+                </span>
+                <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: isVideo ? 'rgba(42, 111, 219, 0.25)' : 'rgba(255,255,255,0.1)', border: isVideo ? '1px solid rgba(42, 111, 219, 0.4)' : '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                  {isVideo ? (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                      Video Slide
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                      Image Slide
+                    </>
+                  )}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Hero Carousel styled move controls */}
+                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: 6, padding: 2, border: '1px solid rgba(255,255,255,0.15)' }}>
+                  <button
+                    type="button"
+                    onClick={() => move(i, -1)}
+                    disabled={i === 0}
+                    title="Move up (Hero carousel order)"
+                    style={{
+                      background: 'none', border: 'none', color: i === 0 ? 'rgba(255,255,255,0.25)' : '#fff',
+                      padding: '4px 8px', cursor: i === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center'
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                  </button>
+                  <div style={{ width: 1, background: 'rgba(255,255,255,0.15)' }} />
+                  <button
+                    type="button"
+                    onClick={() => move(i, 1)}
+                    disabled={i === slides.length - 1}
+                    title="Move down (Hero carousel order)"
+                    style={{
+                      background: 'none', border: 'none', color: i === slides.length - 1 ? 'rgba(255,255,255,0.25)' : '#fff',
+                      padding: '4px 8px', cursor: i === slides.length - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center'
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  title="Remove slide"
+                  style={{
+                    background: 'none', border: 'none', color: '#ff6b6b', padding: '4px 8px',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+            <div style={{ padding: 16 }}>
+              {/* Slide type toggle */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Slide type:</span>
+                {['image', 'video'].map(t => (
+                  <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                    <input
+                      type="radio"
+                      name={`slide-type-${i}`}
+                      value={t}
+                      checked={(slide.type || (slide.video ? 'video' : 'image')) === t}
+                      onChange={() => setField(i, 'type', t)}
+                    />
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </label>
+                ))}
+              </div>
+              {/* Image or Video input depending on type */}
+              {(slide.type || (slide.video ? 'video' : 'image')) === 'video' ? (
+                <VideoInput label="Slide video" value={slide.video} onChange={(v) => setField(i, 'video', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+              ) : (
+                <ImgInput label="Slide image" value={slide.image} onChange={(v) => setField(i, 'image', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
+              )}
+              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="adm-grid2">
+                  <div className="adm-field">
+                    <label>Eyebrow label <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></label>
+                    <input className="adm-input" value={slide.eyebrow || ''} onChange={(e) => setField(i, 'eyebrow', e.target.value)} placeholder="e.g. New Arrivals" />
+                  </div>
+                  <div className="adm-field">
+                    <label>Alt text</label>
+                    <input className="adm-input" value={slide.alt || ''} onChange={(e) => setField(i, 'alt', e.target.value)} placeholder="Describe the media for accessibility" />
+                  </div>
+                </div>
+                <div className="adm-field">
+                  <label>Headline <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(leave blank to use global default)</span></label>
+                  <input className="adm-input" value={slide.title || ''} onChange={(e) => setField(i, 'title', e.target.value)} placeholder="e.g. Discover Better Products." />
+                </div>
+                <div className="adm-field">
+                  <label>Subtitle <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></label>
+                  <textarea className="adm-textarea" style={{ minHeight: 56 }} value={slide.subtitle || ''} onChange={(e) => setField(i, 'subtitle', e.target.value)} placeholder="Short supporting text below the headline…" />
+                </div>
+                <div className="adm-grid2">
+                  <div className="adm-field">
+                    <label>Primary button text</label>
+                    <input className="adm-input" value={slide.cta_text || ''} onChange={(e) => setField(i, 'cta_text', e.target.value)} placeholder="e.g. Explore Now" />
+                  </div>
+                  <div className="adm-field">
+                    <label>Primary button URL</label>
+                    <input className="adm-input" value={slide.cta_url || ''} onChange={(e) => setField(i, 'cta_url', e.target.value)} placeholder="/collection/new" />
+                  </div>
+                </div>
+                <div className="adm-grid2">
+                  <div className="adm-field">
+                    <label>Secondary button text <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></label>
+                    <input className="adm-input" value={slide.cta2_text || ''} onChange={(e) => setField(i, 'cta2_text', e.target.value)} placeholder="e.g. Read Guides" />
+                  </div>
+                  <div className="adm-field">
+                    <label>Secondary button URL</label>
+                    <input className="adm-input" value={slide.cta2_url || ''} onChange={(e) => setField(i, 'cta2_url', e.target.value)} placeholder="/guides" />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div style={{ padding: 16 }}>
-            {/* Slide type toggle */}
-            <div style={{ display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>Slide type:</span>
-              {['image', 'video'].map(t => (
-                <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                  <input
-                    type="radio"
-                    name={`slide-type-${i}`}
-                    value={t}
-                    checked={(slide.type || 'image') === t}
-                    onChange={() => setField(i, 'type', t)}
-                  />
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </label>
-              ))}
-            </div>
-            {/* Image or Video input depending on type */}
-            {(slide.type || 'image') === 'video' ? (
-              <div className="adm-field">
-                <label>Video URL <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(direct link to .mp4 / .webm)</span></label>
-                <input
-                  className="adm-input"
-                  value={slide.video || ''}
-                  onChange={(e) => setField(i, 'video', e.target.value)}
-                  placeholder="https://example.com/hero.mp4"
-                />
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--muted)' }}>
-                  The video will autoplay muted with no controls. It advances to the next slide when it ends.
-                </p>
-              </div>
-            ) : (
-              <ImgInput label="Slide image" value={slide.image} onChange={(v) => setField(i, 'image', v)} onBusyChange={(b) => bumpImgBusy(b ? 1 : -1)} />
-            )}
-            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div className="adm-grid2">
-                <div className="adm-field">
-                  <label>Eyebrow label <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></label>
-                  <input className="adm-input" value={slide.eyebrow || ''} onChange={(e) => setField(i, 'eyebrow', e.target.value)} placeholder="e.g. New Arrivals" />
-                </div>
-                <div className="adm-field">
-                  <label>Alt text</label>
-                  <input className="adm-input" value={slide.alt || ''} onChange={(e) => setField(i, 'alt', e.target.value)} placeholder="Describe the image for accessibility" />
-                </div>
-              </div>
-              <div className="adm-field">
-                <label>Headline <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(leave blank to use global default)</span></label>
-                <input className="adm-input" value={slide.title || ''} onChange={(e) => setField(i, 'title', e.target.value)} placeholder="e.g. Discover Better Products." />
-              </div>
-              <div className="adm-field">
-                <label>Subtitle <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></label>
-                <textarea className="adm-textarea" style={{ minHeight: 56 }} value={slide.subtitle || ''} onChange={(e) => setField(i, 'subtitle', e.target.value)} placeholder="Short supporting text below the headline…" />
-              </div>
-              <div className="adm-grid2">
-                <div className="adm-field">
-                  <label>Primary button text</label>
-                  <input className="adm-input" value={slide.cta_text || ''} onChange={(e) => setField(i, 'cta_text', e.target.value)} placeholder="e.g. Explore Now" />
-                </div>
-                <div className="adm-field">
-                  <label>Primary button URL</label>
-                  <input className="adm-input" value={slide.cta_url || ''} onChange={(e) => setField(i, 'cta_url', e.target.value)} placeholder="/collection/new" />
-                </div>
-              </div>
-              <div className="adm-grid2">
-                <div className="adm-field">
-                  <label>Secondary button text <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></label>
-                  <input className="adm-input" value={slide.cta2_text || ''} onChange={(e) => setField(i, 'cta2_text', e.target.value)} placeholder="e.g. Read Guides" />
-                </div>
-                <div className="adm-field">
-                  <label>Secondary button URL</label>
-                  <input className="adm-input" value={slide.cta2_url || ''} onChange={(e) => setField(i, 'cta2_url', e.target.value)} placeholder="/guides" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
+        );
+      })}
       <button type="button" className="adm-btn adm-btn-ghost" onClick={add} style={{ alignSelf: 'flex-start' }}>+ Add slide</button>
     </div>
   );

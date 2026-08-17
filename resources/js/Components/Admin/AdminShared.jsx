@@ -100,6 +100,20 @@ export async function uploadImageFile(file) {
   return (await res.json()).url;
 }
 
+export async function uploadVideoFile(file) {
+  const data = new FormData();
+  data.append('video', file);
+  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+  const res = await fetch('/admin/videos/upload', {
+    method: 'POST',
+    headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
+    body: data,
+  });
+  if (res.status === 419) { handleSessionExpired(); throw new SessionExpiredError('Session expired'); }
+  if (!res.ok) throw new Error('Upload failed');
+  return (await res.json()).url;
+}
+
 export function uploadErrorMessage(err) {
   return err instanceof SessionExpiredError
     ? 'Your session has expired — please reload the page and try again.'
@@ -132,7 +146,7 @@ export function useUploadBusy() {
   return [count > 0, bump];
 }
 
-// ── Shared image inputs ───────────────────────────────────────────────────────
+// ── Shared image & video inputs ───────────────────────────────────────────────
 
 export function ImgInput({ value, onChange, label, onBusyChange }) {
   const ref = useRef(null);
@@ -165,6 +179,51 @@ export function ImgInput({ value, onChange, label, onBusyChange }) {
           <input
             className="adm-input"
             placeholder="…or paste URL"
+            value={value && value.startsWith('data:') ? '' : (value || '')}
+            onChange={(e) => onChange(e.target.value)}
+            style={{ fontSize: 13 }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function VideoInput({ value, onChange, label, onBusyChange }) {
+  const ref = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const pick = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setBusy(true); setUploadError(null); onBusyChange?.(true);
+    try { onChange(await uploadVideoFile(f)); } catch (err) { setUploadError(err); }
+    setBusy(false); onBusyChange?.(false);
+    e.target.value = '';
+  };
+  return (
+    <div className="adm-field">
+      {label && <label>{label}</label>}
+      <div className="adm-img">
+        <div className="adm-img-prev" style={{ width: 110, height: 75, background: '#0d1b2a', borderRadius: 6, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {value ? (
+            <video src={value} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          )}
+        </div>
+        <div className="adm-img-controls">
+          <input ref={ref} type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*" style={{ display: 'none' }} onChange={pick} />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => ref.current.click()} disabled={busy}>
+              <I.upload /> {busy ? 'Uploading video…' : 'Upload Video File'}
+            </button>
+            {value && <button type="button" className="adm-btn adm-btn-ghost sm" onClick={() => onChange('')}>Remove</button>}
+          </div>
+          <UploadErrorNote error={uploadError} />
+          <input
+            className="adm-input"
+            placeholder="…or paste direct video URL (.mp4, .webm)"
             value={value && value.startsWith('data:') ? '' : (value || '')}
             onChange={(e) => onChange(e.target.value)}
             style={{ fontSize: 13 }}
