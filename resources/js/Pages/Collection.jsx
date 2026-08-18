@@ -54,6 +54,11 @@ const TYPES_CONFIG = {
     heroImg: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=1600&q=72",
     accent: "#bb9357",
   },
+  search: {
+    eyebrow: "Search Results", title: "Search Results",
+    tagline: "Browsing all products matching your search.",
+    filter: "category",
+  },
 };
 
 const PRICE_BANDS = [
@@ -82,17 +87,21 @@ function sortC(list, key) {
 
 export default function Collection() {
   const { props } = usePage();
-  const { type, products, occasion, categories, initialCategory } = props;
+  const { type, products, occasion, categories, initialCategory, searchQuery } = props;
 
   const base = TYPES_CONFIG[type] || TYPES_CONFIG.new;
-  const cfg = occasion ? {
+  const cfg = type === 'search' ? {
+    ...base,
+    title: searchQuery ? `Results for "${searchQuery}"` : "Search Results",
+    tagline: searchQuery ? `Showing products matching "${searchQuery}".` : "Browsing all matching products.",
+  } : (occasion ? {
     ...base,
     eyebrow: occasion.eyebrow || base.eyebrow,
     title: occasion.title || base.title,
     tagline: occasion.tagline || base.tagline,
     heroImg: occasion.img || base.heroImg,
     accent: occasion.accent || base.accent,
-  } : base;
+  } : base);
 
   const resolveCat = (val) => {
     if (!val || val === "all") return "all";

@@ -272,11 +272,20 @@ function SearchModal({ open, onClose, catalog, categories }) {
     const onNav = (e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); setHl((h) => Math.min(h + 1, shown.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
-      else if (e.key === "Enter" && shown[hl]) { window.location.href = `/product/${shown[hl].slug || shown[hl].id}`; }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        if (shown[hl] && hl >= 0) {
+          onClose();
+          window.location.href = `/product/${shown[hl].slug || shown[hl].id}`;
+        } else if (query) {
+          onClose();
+          window.location.href = `/collection/search?q=${encodeURIComponent(query)}`;
+        }
+      }
     };
     document.addEventListener("keydown", onNav);
     return () => document.removeEventListener("keydown", onNav);
-  }, [open, shown, hl, query]);
+  }, [open, shown, hl, query, onClose]);
 
   if (!open) return null;
 
@@ -304,7 +313,7 @@ function SearchModal({ open, onClose, catalog, categories }) {
             <div className="search-group">
               <h5>Popular searches</h5>
               <div className="search-chips">
-                {popular.map((p) => <Link key={p.label} href={p.href}>{p.label}</Link>)}
+                {popular.map((p) => <Link key={p.label} href={p.href} onClick={onClose}>{p.label}</Link>)}
               </div>
             </div>
           ) : (results.length === 0 && catMatches.length === 0) ? (
@@ -318,7 +327,7 @@ function SearchModal({ open, onClose, catalog, categories }) {
                 <div className="search-group">
                   <h5>Categories</h5>
                   <div className="search-chips">
-                    {catMatches.map((c, i) => <Link key={i} href={c.href}>{c.type === "sub" ? `${c.sub} · ${c.label}` : c.label}</Link>)}
+                    {catMatches.map((c, i) => <Link key={i} href={c.href} onClick={onClose}>{c.type === "sub" ? `${c.sub} · ${c.label}` : c.label}</Link>)}
                   </div>
                 </div>
               )}
@@ -327,6 +336,7 @@ function SearchModal({ open, onClose, catalog, categories }) {
                   <h5>Products · {results.length} found</h5>
                   {shown.map((p, i) => (
                     <Link className={"search-res" + (i === hl ? " hl" : "")} key={p.id} href={`/product/${p.slug || p.id}`}
+                      onClick={onClose}
                       onMouseEnter={() => setHl(i)}>
                       <span className="thumb">{p.image ? <img className="p-img" src={p.image} alt="" /> : null}</span>
                       <span className="meta">
@@ -335,8 +345,8 @@ function SearchModal({ open, onClose, catalog, categories }) {
                       </span>
                     </Link>
                   ))}
-                  {results.length > shown.length && (
-                    <Link className="search-more" href={`/category/${(categories || [])[0]?.slug || ''}`}>
+                  {results.length > 0 && (
+                    <Link className="search-more" href={`/collection/search?q=${encodeURIComponent(query)}`} onClick={onClose}>
                       View all {results.length} results →
                     </Link>
                   )}

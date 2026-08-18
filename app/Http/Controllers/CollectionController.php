@@ -24,6 +24,17 @@ class CollectionController extends Controller
             'editors' => Product::where('is_featured', true)->with(['category', 'subcategory'])->get(),
             'trending' => Product::whereNotNull('badge')->with(['category', 'subcategory'])->get(),
             'gifts' => Product::with(['category', 'subcategory'])->get(),
+            'search' => Product::where(function ($q) use ($request) {
+                $searchTerm = trim($request->query('q', ''));
+                if ($searchTerm !== '') {
+                    $q->where('name', 'like', "%{$searchTerm}%")
+                      ->orWhere('brand', 'like', "%{$searchTerm}%")
+                      ->orWhere('description', 'like', "%{$searchTerm}%")
+                      ->orWhere('badge', 'like', "%{$searchTerm}%")
+                      ->orWhereHas('category', fn ($cat) => $cat->where('name', 'like', "%{$searchTerm}%"))
+                      ->orWhereHas('subcategory', fn ($sub) => $sub->where('name', 'like', "%{$searchTerm}%"));
+                }
+            })->with(['category', 'subcategory'])->get(),
             default => Product::where(function ($q) use ($type) {
                 $occasion = Occasion::where('key', $type)->first();
                 if ($occasion && $occasion->product_ids) {
@@ -51,6 +62,7 @@ class CollectionController extends Controller
             'occasion' => $occasion,
             'categories' => $categories,
             'initialCategory' => $catParam,
+            'searchQuery' => $request->query('q', ''),
         ]);
     }
 }
