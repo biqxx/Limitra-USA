@@ -82,7 +82,7 @@ function sortC(list, key) {
 
 export default function Collection() {
   const { props } = usePage();
-  const { type, products, occasion, categories } = props;
+  const { type, products, occasion, categories, initialCategory } = props;
 
   const base = TYPES_CONFIG[type] || TYPES_CONFIG.new;
   const cfg = occasion ? {
@@ -94,7 +94,16 @@ export default function Collection() {
     accent: occasion.accent || base.accent,
   } : base;
 
-  const [activeFilter, setActiveFilter] = useState("all");
+  const resolveCat = (val) => {
+    if (!val || val === "all") return "all";
+    const decoded = decodeURIComponent(val).trim();
+    const match = (categories || []).find(
+      (c) => c.name.toLowerCase() === decoded.toLowerCase() || c.slug.toLowerCase() === decoded.toLowerCase()
+    );
+    return match ? match.name : decoded;
+  };
+
+  const [activeFilter, setActiveFilter] = useState(() => resolveCat(initialCategory));
   const [sort, setSort] = useState("featured");
   const { saved, toggle } = useSaved();
   const [quick, setQuick] = useState(null);
@@ -102,10 +111,25 @@ export default function Collection() {
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const catParam = params.get("cat") || params.get("category") || initialCategory;
+      setActiveFilter(resolveCat(catParam));
+    }
+  }, [initialCategory, categories]);
+
   const allProducts = products || [];
 
   let filtered = allProducts;
-  if (cfg.filter === "category" && activeFilter !== "all") filtered = allProducts.filter((p) => p.category === activeFilter);
+  if (cfg.filter === "category" && activeFilter !== "all") {
+    const target = activeFilter.toLowerCase();
+    filtered = allProducts.filter(
+      (p) =>
+        (p.category && p.category.toLowerCase() === target) ||
+        (p.category_slug && p.category_slug.toLowerCase() === target)
+    );
+  }
   if (cfg.filter === "price" && activeFilter !== "all") {
     const band = PRICE_BANDS.find((b) => b.key === activeFilter);
     if (band) filtered = allProducts.filter((p) => band.test(priceNum(p.price)));

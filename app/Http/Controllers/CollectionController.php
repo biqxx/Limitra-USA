@@ -7,10 +7,14 @@ use App\Models\Occasion;
 use App\Models\Product;
 use Inertia\Inertia;
 
+use Illuminate\Http\Request;
+
 class CollectionController extends Controller
 {
-    public function show(string $type)
+    public function show(Request $request, string $type)
     {
+        $catParam = $request->query('cat') ?? $request->query('category');
+
         $products = match($type) {
             'new' => Product::where('is_new', true)->with(['category', 'subcategory'])->get(),
             'editors' => Product::where('is_featured', true)->with(['category', 'subcategory'])->get(),
@@ -42,6 +46,7 @@ class CollectionController extends Controller
             'products' => $products->map(fn ($p) => $p->toFrontend()),
             'occasion' => $occasion,
             'categories' => $categories,
+            'initialCategory' => $catParam,
         ]);
     }
 }
