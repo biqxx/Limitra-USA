@@ -21,6 +21,17 @@ class Product extends Model
         'is_new' => 'boolean',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function () {
+            \Illuminate\Support\Facades\Cache::forget('inertia_shared_catalog');
+        });
+
+        static::deleted(function () {
+            \Illuminate\Support\Facades\Cache::forget('inertia_shared_catalog');
+        });
+    }
+
     public function category()
     {
         return $this->belongsTo(Category::class);

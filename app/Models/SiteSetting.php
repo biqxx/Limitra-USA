@@ -8,6 +8,17 @@ class SiteSetting extends Model
 {
     protected $fillable = ['key', 'value'];
 
+    protected static function booted(): void
+    {
+        static::saved(function () {
+            \Illuminate\Support\Facades\Cache::forget('inertia_shared_layout_settings');
+        });
+
+        static::deleted(function () {
+            \Illuminate\Support\Facades\Cache::forget('inertia_shared_layout_settings');
+        });
+    }
+
     public static function getValue(string $key, string $default = ''): string
     {
         return static::where('key', $key)->value('value') ?? $default;

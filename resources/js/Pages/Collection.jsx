@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { usePage, Link } from '@inertiajs/react';
+import { useState, useEffect } from 'react';
+import { usePage, Link, router } from '@inertiajs/react';
 import Layout from '../Components/Layout';
 import Seo from '../Components/Seo';
 import { ProductCard, QuickView, SavedDrawer } from '../Components/ProductCard';
@@ -62,11 +62,11 @@ const TYPES_CONFIG = {
 };
 
 const PRICE_BANDS = [
-  { key: "all", label: "All Gifts", test: () => true },
-  { key: "u75", label: "Under $75", test: (n) => n < 75 },
-  { key: "75-200", label: "$75 – $200", test: (n) => n >= 75 && n <= 200 },
-  { key: "200-500", label: "$200 – $500", test: (n) => n > 200 && n <= 500 },
-  { key: "lux", label: "Luxe · $500+", test: (n) => n > 500 },
+  { key: "all", label: "All Gifts" },
+  { key: "u75", label: "Under $75" },
+  { key: "75-200", label: "$75 – $200" },
+  { key: "200-500", label: "$200 – $500" },
+  { key: "lux", label: "Luxe · $500+" },
 ];
 
 const SORTS = [
@@ -75,19 +75,10 @@ const SORTS = [
   { key: "price-desc", label: "Price: High to Low" },
   { key: "rating", label: "Top Rated" },
 ];
-const priceNum = (p) => Number(String(p).replace(/[^0-9.]/g, "")) || 0;
-
-function sortC(list, key) {
-  const a = [...list];
-  if (key === "price-asc") a.sort((x, y) => priceNum(x.price) - priceNum(y.price));
-  else if (key === "price-desc") a.sort((x, y) => priceNum(y.price) - priceNum(x.price));
-  else if (key === "rating") a.sort((x, y) => (y.rating || 0) - (x.rating || 0));
-  return a;
-}
 
 export default function Collection() {
   const { props } = usePage();
-  const { type, products, occasion, categories, initialCategory, searchQuery } = props;
+  const { type, products, occasion, categories, initialCategory, searchQuery, initialSort = "featured" } = props;
 
   const base = TYPES_CONFIG[type] || TYPES_CONFIG.new;
   const cfg = type === 'search' ? {
@@ -113,39 +104,79 @@ export default function Collection() {
   };
 
   const [activeFilter, setActiveFilter] = useState(() => resolveCat(initialCategory));
-  const [sort, setSort] = useState("featured");
+  const [sort, setSort] = useState(initialSort);
   const { saved, toggle } = useSaved();
   const [quick, setQuick] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
 
+  const isPaginated = !Array.isArray(products) && products?.data;
+  const initialItems = isPaginated ? products.data : (Array.isArray(products) ? products : []);
+  const [items, setItems] = useState(initialItems);
+
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const catParam = params.get("cat") || params.get("category") || initialCategory;
-      setActiveFilter(resolveCat(catParam));
+    if (isPaginated) {
+      if (products.current_page === 1) {
+        setItems(products.data);
+      } else {
+        setItems((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const newItems = products.data.filter((p) => !existingIds.has(p.id));
+          return [...prev, ...newItems];
+        });
+      }
+    } else {
+      setItems(Array.isArray(products) ? products : []);
     }
-  }, [initialCategory, categories]);
+  }, [products]);
 
-  const allProducts = products || [];
+  const totalCount = isPaginated ? (products.total || items.length) : items.length;
+  const hasMore = isPaginated && !!products.next_page_url;
 
-  let filtered = allProducts;
-  if (cfg.filter === "category" && activeFilter !== "all") {
-    const target = activeFilter.toLowerCase();
-    filtered = allProducts.filter(
-      (p) =>
-        (p.category && p.category.toLowerCase() === target) ||
-        (p.category_slug && p.category_slug.toLowerCase() === target)
+  const handleFilterChange = (key) => {
+    setActiveFilter(key);
+    const queryParams = { sort };
+    if (key !== 'all') queryParams.cat = key;
+    if (searchQuery) queryParams.q = searchQuery;
+
+    router.get(
+      `/collection/${type}`,
+      queryParams,
+      { preserveScroll: true, preserveState: false }
     );
-  }
-  if (cfg.filter === "price" && activeFilter !== "all") {
-    const band = PRICE_BANDS.find((b) => b.key === activeFilter);
-    if (band) filtered = allProducts.filter((p) => band.test(priceNum(p.price)));
-  }
-  const sorted = sortC(filtered, sort);
-  const savedProducts = allProducts.filter((p) => saved.has(p.id));
+  };
 
+  const handleSortChange = (newSort) => {
+    setSort(newSort);
+    const queryParams = { sort: newSort };
+    if (activeFilter !== 'all') queryParams.cat = activeFilter;
+    if (searchQuery) queryParams.q = searchQuery;
+
+    router.get(
+      `/collection/${type}`,
+      queryParams,
+      { preserveScroll: true, preserveState: false }
+    );
+  };
+
+  const loadMore = () => {
+    if (!products?.next_page_url || loadingMore) return;
+    setLoadingMore(true);
+    router.get(
+      products.next_page_url,
+      {},
+      {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['products'],
+        onFinish: () => setLoadingMore(false),
+      }
+    );
+  };
+
+  const savedProducts = items.filter((p) => saved.has(p.id));
   const catNames = (categories || []).map((c) => c.name);
   const filterChips = cfg.filter === "price"
     ? PRICE_BANDS.map((b) => ({ key: b.key, label: b.label }))
@@ -156,7 +187,7 @@ export default function Collection() {
       <Seo
         title={cfg.title}
         description={cfg.tagline}
-        image={cfg.heroImg || (products || [])[0]?.image}
+        image={cfg.heroImg || items[0]?.image}
       />
       <div className="announce">Exclusive access to curated luxury · <strong>Editor-vetted picks, updated weekly</strong></div>
 
@@ -172,7 +203,7 @@ export default function Collection() {
             <span className="eyebrow">{cfg.eyebrow}</span>
             <h1>{cfg.title}</h1>
             <p>{cfg.tagline}</p>
-            <span className="cat-count-pill">{allProducts.length} curated products</span>
+            <span className="cat-count-pill">{totalCount} curated products</span>
           </div>
         </div>
       </section>
@@ -180,7 +211,7 @@ export default function Collection() {
       <div className="subrail">
         <div className="wrap subrail-inner">
           {filterChips.map((c) => (
-            <button key={c.key} className={"chip" + (activeFilter === c.key ? " active" : "")} onClick={() => setActiveFilter(c.key)}>
+            <button key={c.key} className={"chip" + (activeFilter === c.key ? " active" : "")} onClick={() => handleFilterChange(c.key)}>
               {c.label}
             </button>
           ))}
@@ -189,23 +220,37 @@ export default function Collection() {
 
       <section className="wrap" style={{ padding: 0 }}>
         <div className="listing-toolbar">
-          <span className="result-count"><strong>{sorted.length}</strong> {sorted.length === 1 ? "product" : "products"}</span>
+          <span className="result-count"><strong>{totalCount}</strong> {totalCount === 1 ? "product" : "products"}</span>
           <div className="sort-wrap">
             <label htmlFor="sort">Sort</label>
-            <select id="sort" className="sort-select" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <select id="sort" className="sort-select" value={sort} onChange={(e) => handleSortChange(e.target.value)}>
               {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </div>
         </div>
-        {sorted.length === 0 ? (
+        {items.length === 0 ? (
           <div className="listing-empty">Nothing in this range yet — try another filter.</div>
         ) : (
           <div style={{ paddingBottom: 40 }}>
             <div className="listing-grid">
-              {sorted.map((p) => (
+              {items.map((p) => (
                 <ProductCard key={p.id} p={p} saved={saved.has(p.id)} onToggle={toggle} onQuick={setQuick} dealCta="Buy Now" />
               ))}
             </div>
+
+            {hasMore && (
+              <div style={{ textAlign: 'center', marginTop: 32, marginBottom: 20 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ minWidth: 220, padding: '14px 28px', fontSize: 13, letterSpacing: '.08em' }}
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? 'Loading next batch...' : `Load More Products (${items.length} of ${totalCount} shown)`}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>

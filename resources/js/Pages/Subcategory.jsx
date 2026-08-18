@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { usePage, Link } from '@inertiajs/react';
+import { usePage, Link, router } from '@inertiajs/react';
 import Layout from '../Components/Layout';
 import Seo from '../Components/Seo';
 import { ProductCard, QuickView, SavedDrawer } from '../Components/ProductCard';
@@ -11,31 +11,68 @@ const SORTS = [
   { key: "price-desc", label: "Price: High to Low" },
   { key: "rating", label: "Top Rated" },
 ];
-const priceNum = (p) => Number(String(p).replace(/[^0-9.]/g, "")) || 0;
-
-function sortProducts(list, key) {
-  const a = [...list];
-  if (key === "price-asc") a.sort((x, y) => priceNum(x.price) - priceNum(y.price));
-  else if (key === "price-desc") a.sort((x, y) => priceNum(y.price) - priceNum(x.price));
-  else if (key === "rating") a.sort((x, y) => (y.rating || 0) - (x.rating || 0));
-  return a;
-}
 
 export default function Subcategory() {
   const { props } = usePage();
-  const { category, subcategory, subcategorySeoDesc, products } = props;
+  const { category, subcategory, subcategorySeoDesc, products, initialSort = "featured" } = props;
 
-  const [sort, setSort] = useState("featured");
+  const [sort, setSort] = useState(initialSort);
   const { saved, toggle } = useSaved();
   const [quick, setQuick] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
 
-  const allProducts = products || [];
-  const sorted = sortProducts(allProducts, sort);
-  const savedProducts = allProducts.filter((p) => saved.has(p.id));
+  const isPaginated = !Array.isArray(products) && products?.data;
+  const initialItems = isPaginated ? products.data : (Array.isArray(products) ? products : []);
+  const [items, setItems] = useState(initialItems);
 
+  useEffect(() => {
+    if (isPaginated) {
+      if (products.current_page === 1) {
+        setItems(products.data);
+      } else {
+        setItems((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const newItems = products.data.filter((p) => !existingIds.has(p.id));
+          return [...prev, ...newItems];
+        });
+      }
+    } else {
+      setItems(Array.isArray(products) ? products : []);
+    }
+  }, [products]);
+
+  const totalCount = isPaginated ? (products.total || items.length) : items.length;
+  const hasMore = isPaginated && !!products.next_page_url;
+
+  const handleSortChange = (newSort) => {
+    setSort(newSort);
+    const subSlug = encodeURIComponent((subcategory || '').toLowerCase().replace(/\s+/g, '-'));
+    router.get(
+      `/category/${category?.slug}/${subSlug}`,
+      { sort: newSort },
+      { preserveScroll: true, preserveState: false }
+    );
+  };
+
+  const loadMore = () => {
+    if (!products?.next_page_url || loadingMore) return;
+    setLoadingMore(true);
+    router.get(
+      products.next_page_url,
+      {},
+      {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['products'],
+        onFinish: () => setLoadingMore(false),
+      }
+    );
+  };
+
+  const savedProducts = items.filter((p) => saved.has(p.id));
   const subs = category?.subcategories || [];
   const subLink = (s) => `/category/${category?.slug}/${encodeURIComponent(s.toLowerCase().replace(/\s+/g, '-'))}`;
 
@@ -62,7 +99,7 @@ export default function Subcategory() {
             <span className="eyebrow">{category?.name}</span>
             <h1>{subcategory}</h1>
             <p>Our editors' curated {subcategory?.toLowerCase()} edit — every piece vetted, then linked straight to the best place to buy it.</p>
-            <span className="cat-count-pill">{allProducts.length} products</span>
+            <span className="cat-count-pill">{totalCount} products</span>
           </div>
         </div>
       </section>
@@ -80,23 +117,37 @@ export default function Subcategory() {
 
       <section className="wrap" style={{ padding: 0 }}>
         <div className="listing-toolbar">
-          <span className="result-count"><strong>{sorted.length}</strong> {sorted.length === 1 ? "product" : "products"} in {subcategory}</span>
+          <span className="result-count"><strong>{totalCount}</strong> {totalCount === 1 ? "product" : "products"} in {subcategory}</span>
           <div className="sort-wrap">
             <label htmlFor="sort">Sort</label>
-            <select id="sort" className="sort-select" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <select id="sort" className="sort-select" value={sort} onChange={(e) => handleSortChange(e.target.value)}>
               {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </div>
         </div>
-        {sorted.length === 0 ? (
+        {items.length === 0 ? (
           <div className="listing-empty">No products here yet — check back soon.</div>
         ) : (
           <div style={{ paddingBottom: 40 }}>
             <div className="listing-grid">
-              {sorted.map((p) => (
+              {items.map((p) => (
                 <ProductCard key={p.id} p={p} saved={saved.has(p.id)} onToggle={toggle} onQuick={setQuick} dealCta="Buy Now" />
               ))}
             </div>
+
+            {hasMore && (
+              <div style={{ textAlign: 'center', marginTop: 32, marginBottom: 20 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ minWidth: 220, padding: '14px 28px', fontSize: 13, letterSpacing: '.08em' }}
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? 'Loading next batch...' : `Load More Products (${items.length} of ${totalCount} shown)`}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>

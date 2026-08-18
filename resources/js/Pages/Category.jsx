@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
-import { usePage, Link } from '@inertiajs/react';
+import { useState, useEffect } from 'react';
+import { usePage, Link, router } from '@inertiajs/react';
 import Layout from '../Components/Layout';
 import Seo from '../Components/Seo';
 import { ProductCard, QuickView, SavedDrawer } from '../Components/ProductCard';
 import useSaved from '../hooks/useSaved';
-import { Newsletter } from '../Components/Layout';
 
 const SORTS = [
   { key: "featured", label: "Featured" },
@@ -12,38 +11,78 @@ const SORTS = [
   { key: "price-desc", label: "Price: High to Low" },
   { key: "rating", label: "Top Rated" },
 ];
-const priceNum = (p) => Number(String(p).replace(/[^0-9.]/g, "")) || 0;
-
-function sortProducts(list, key) {
-  const a = [...list];
-  if (key === "price-asc") a.sort((x, y) => priceNum(x.price) - priceNum(y.price));
-  else if (key === "price-desc") a.sort((x, y) => priceNum(y.price) - priceNum(x.price));
-  else if (key === "rating") a.sort((x, y) => (y.rating || 0) - (x.rating || 0));
-  return a;
-}
 
 export default function Category() {
   const { props } = usePage();
-  const { category, products } = props;
+  const { category, products, initialSub = "All", initialSort = "featured" } = props;
 
-  const [activeSub, setActiveSub] = useState("All");
-  const [sort, setSort] = useState("featured");
+  const [activeSub, setActiveSub] = useState(initialSub);
+  const [sort, setSort] = useState(initialSort);
   const { saved, toggle } = useSaved();
   const [quick, setQuick] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
 
-  const allProducts = products || [];
+  const isPaginated = !Array.isArray(products) && products?.data;
+  const initialItems = isPaginated ? products.data : (Array.isArray(products) ? products : []);
+  const [items, setItems] = useState(initialItems);
+
+  useEffect(() => {
+    if (isPaginated) {
+      if (products.current_page === 1) {
+        setItems(products.data);
+      } else {
+        setItems((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const newItems = products.data.filter((p) => !existingIds.has(p.id));
+          return [...prev, ...newItems];
+        });
+      }
+    } else {
+      setItems(Array.isArray(products) ? products : []);
+    }
+  }, [products]);
+
+  const totalCount = isPaginated ? (products.total || items.length) : items.length;
+  const hasMore = isPaginated && !!products.next_page_url;
+
+  const handleSubChange = (subName) => {
+    setActiveSub(subName);
+    router.get(
+      `/category/${category?.slug}`,
+      { sub: subName, sort },
+      { preserveScroll: true, preserveState: false }
+    );
+  };
+
+  const handleSortChange = (newSort) => {
+    setSort(newSort);
+    router.get(
+      `/category/${category?.slug}`,
+      { sub: activeSub, sort: newSort },
+      { preserveScroll: true, preserveState: false }
+    );
+  };
+
+  const loadMore = () => {
+    if (!products?.next_page_url || loadingMore) return;
+    setLoadingMore(true);
+    router.get(
+      products.next_page_url,
+      {},
+      {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['products'],
+        onFinish: () => setLoadingMore(false),
+      }
+    );
+  };
+
+  const savedProducts = items.filter((p) => saved.has(p.id));
   const subs = category?.subcategories || [];
-  const subCount = (s) => allProducts.filter((p) => p.subcategory === s).length;
-
-  const filtered = activeSub === "All" ? allProducts : allProducts.filter((p) => p.subcategory === activeSub);
-  const sorted = sortProducts(filtered, sort);
-  const savedProducts = allProducts.filter((p) => saved.has(p.id));
-
-  const grouped = activeSub === "All" && sort === "featured";
-
   const subLink = (s) => `/category/${category?.slug}/${encodeURIComponent(s.toLowerCase().replace(/\s+/g, '-'))}`;
 
   return (
@@ -67,19 +106,19 @@ export default function Category() {
             <span className="eyebrow">Limitra Edit</span>
             <h1>{category?.name}</h1>
             <p>{category?.tagline}</p>
-            <span className="cat-count-pill">{allProducts.length} curated products</span>
+            <span className="cat-count-pill">{totalCount} curated products</span>
           </div>
         </div>
       </section>
 
       <div className="subrail">
         <div className="wrap subrail-inner">
-          <button className={"chip" + (activeSub === "All" ? " active" : "")} onClick={() => setActiveSub("All")}>
-            All<span className="c">{allProducts.length}</span>
+          <button className={"chip" + (activeSub === "All" ? " active" : "")} onClick={() => handleSubChange("All")}>
+            All
           </button>
           {subs.map((s) => (
-            <button key={s} className={"chip" + (activeSub === s ? " active" : "")} onClick={() => setActiveSub(s)}>
-              {s}<span className="c">{subCount(s)}</span>
+            <button key={s} className={"chip" + (activeSub === s ? " active" : "")} onClick={() => handleSubChange(s)}>
+              {s}
             </button>
           ))}
         </div>
@@ -88,46 +127,40 @@ export default function Category() {
       <section className="wrap" style={{ padding: 0 }}>
         <div className="listing-toolbar">
           <span className="result-count">
-            <strong>{sorted.length}</strong> {sorted.length === 1 ? "product" : "products"}
+            <strong>{totalCount}</strong> {totalCount === 1 ? "product" : "products"}
             {activeSub !== "All" && <> in {activeSub}</>}
           </span>
           <div className="sort-wrap">
             <label htmlFor="sort">Sort</label>
-            <select id="sort" className="sort-select" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <select id="sort" className="sort-select" value={sort} onChange={(e) => handleSortChange(e.target.value)}>
               {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </div>
         </div>
 
-        {sorted.length === 0 ? (
+        {items.length === 0 ? (
           <div className="listing-empty">No products here yet — check back soon.</div>
-        ) : grouped ? (
-          <div style={{ paddingBottom: 40 }}>
-            {subs.map((s) => {
-              const items = allProducts.filter((p) => p.subcategory === s);
-              if (!items.length) return null;
-              return (
-                <div key={s}>
-                  <div className="subsection-head">
-                    <h2>{s}</h2>
-                    <Link href={subLink(s)}>View all {items.length} →</Link>
-                  </div>
-                  <div className="listing-grid">
-                    {items.map((p) => (
-                      <ProductCard key={p.id} p={p} saved={saved.has(p.id)} onToggle={toggle} onQuick={setQuick} dealCta="Buy Now" />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         ) : (
           <div style={{ paddingBottom: 40 }}>
             <div className="listing-grid">
-              {sorted.map((p) => (
+              {items.map((p) => (
                 <ProductCard key={p.id} p={p} saved={saved.has(p.id)} onToggle={toggle} onQuick={setQuick} dealCta="Buy Now" />
               ))}
             </div>
+
+            {hasMore && (
+              <div style={{ textAlign: 'center', marginTop: 32, marginBottom: 20 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ minWidth: 220, padding: '14px 28px', fontSize: 13, letterSpacing: '.08em' }}
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? 'Loading next batch...' : `Load More Products (${items.length} of ${totalCount} shown)`}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>

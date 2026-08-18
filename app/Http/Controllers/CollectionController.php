@@ -15,15 +15,17 @@ class CollectionController extends Controller
     {
         $catParam = $request->query('cat') ?? $request->query('category');
 
-        $products = match($type) {
+        $sort = $request->query('sort', 'featured');
+
+        $query = match($type) {
             'new' => Product::where(function ($q) {
                 $q->where('is_new', true)
                   ->orWhereJsonContains('tags', 'new')
                   ->orWhere('badge', 'like', '%new%');
-            })->with(['category', 'subcategory'])->get(),
-            'editors' => Product::where('is_featured', true)->with(['category', 'subcategory'])->get(),
-            'trending' => Product::whereNotNull('badge')->with(['category', 'subcategory'])->get(),
-            'gifts' => Product::with(['category', 'subcategory'])->get(),
+            })->with(['category', 'subcategory']),
+            'editors' => Product::where('is_featured', true)->with(['category', 'subcategory']),
+            'trending' => Product::whereNotNull('badge')->with(['category', 'subcategory']),
+            'gifts' => Product::with(['category', 'subcategory']),
             'search' => Product::where(function ($q) use ($request) {
                 $searchTerm = trim($request->query('q', ''));
                 if ($searchTerm !== '') {
@@ -34,7 +36,7 @@ class CollectionController extends Controller
                       ->orWhereHas('category', fn ($cat) => $cat->where('name', 'like', "%{$searchTerm}%"))
                       ->orWhereHas('subcategory', fn ($sub) => $sub->where('name', 'like', "%{$searchTerm}%"));
                 }
-            })->with(['category', 'subcategory'])->get(),
+            })->with(['category', 'subcategory']),
             default => Product::where(function ($q) use ($type) {
                 $occasion = Occasion::where('key', $type)->first();
                 if ($occasion && $occasion->product_ids) {
@@ -44,8 +46,24 @@ class CollectionController extends Controller
                     // Legacy/bulk curation by subcategory, kept for occasions configured this way.
                     $q->whereHas('subcategory', fn ($sq) => $sq->whereIn('name', $occasion->subcats));
                 }
-            })->with(['category', 'subcategory'])->get(),
+            })->with(['category', 'subcategory']),
         };
+
+        if ($catParam && $catParam !== 'all') {
+            $query->whereHas('category', fn ($cat) => $cat->where('name', $catParam)->orWhere('slug', $catParam));
+        }
+
+        if ($sort === 'price-asc') {
+            $query->orderByRaw('CAST(REGEXP_REPLACE(price, "[^0-9.]", "") AS DECIMAL(10,2)) ASC');
+        } elseif ($sort === 'price-desc') {
+            $query->orderByRaw('CAST(REGEXP_REPLACE(price, "[^0-9.]", "") AS DECIMAL(10,2)) DESC');
+        } elseif ($sort === 'rating') {
+            $query->orderByDesc('rating');
+        } else {
+            $query->orderByDesc('is_featured')->orderByDesc('id');
+        }
+
+        $products = $query->paginate(24)->withQueryString()->through(fn ($p) => $p->toFrontend());
 
         $occasion = Occasion::where('key', $type)->first();
 
@@ -58,11 +76,12 @@ class CollectionController extends Controller
 
         return Inertia::render('Collection', [
             'type' => $type,
-            'products' => $products->map(fn ($p) => $p->toFrontend()),
+            'products' => $products,
             'occasion' => $occasion,
             'categories' => $categories,
             'initialCategory' => $catParam,
             'searchQuery' => $request->query('q', ''),
+            'initialSort' => $sort,
         ]);
     }
 }
