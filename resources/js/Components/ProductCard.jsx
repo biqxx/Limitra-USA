@@ -20,7 +20,7 @@ export function Rating({ value, small }) {
 
 export function Bookmark({ saved, onClick }) {
   return (
-    <button className={"bookmark" + (saved ? " saved" : "")} onClick={(e) => { e.stopPropagation(); onClick(); }}
+    <button type="button" className={"bookmark" + (saved ? " saved" : "")} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
       aria-label={saved ? "Remove bookmark" : "Save product"} title={saved ? "Saved" : "Save"}>
       <I.heart fill={saved ? "currentColor" : "none"} />
     </button>
@@ -29,7 +29,7 @@ export function Bookmark({ saved, onClick }) {
 
 export function ProductCard({ p, saved, onToggle, onQuick, dealCta, lead }) {
   return (
-    <article className={"prod-card" + (lead ? " lead" : "")}>
+    <Link href={`/product/${p.slug || p.id}`} className={"prod-card" + (lead ? " lead" : "")}>
       <div className="prod-image">
         {p.image && <img className="p-img" src={p.image} alt={p.name} loading="lazy" />}
         {lead && (
@@ -37,22 +37,22 @@ export function ProductCard({ p, saved, onToggle, onQuick, dealCta, lead }) {
             <I.star width="13" height="13" /> Editor's Choice
           </div>
         )}
+        <Bookmark saved={saved} onClick={() => onToggle(p.id)} />
       </div>
       <div style={{ height: "1px", background: "var(--line)", margin: 0 }}></div>
       <div className="prod-body">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-          <div>
+        <div className="prod-body-main">
+          <div className="prod-info">
             <span className="prod-brand">{p.brand}</span>
             <h3 className="prod-name">{p.name}</h3>
           </div>
-          <span className="prod-price" style={{ whiteSpace: "nowrap", marginTop: 0 }}>{formatPrice(p.price)}</span>
+          <span className="prod-price">{formatPrice(p.price)}</span>
         </div>
       </div>
       <div className="prod-actions">
-        <Link className="deal-btn" href={`/product/${p.slug || p.id}`}>{dealCta && dealCta !== "Buy Now" ? dealCta : shopCta()}</Link>
-        <Bookmark saved={saved} onClick={() => onToggle(p.id)} />
+        <span className="deal-btn">{dealCta && dealCta !== "Buy Now" ? dealCta : shopCta()}</span>
       </div>
-    </article>
+    </Link>
   );
 }
 
