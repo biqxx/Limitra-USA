@@ -269,6 +269,17 @@ export default function SettingsView({ settings, onToast }) {
         </div>
       </div>
       <div className="adm-panel">
+        <h2>New Arrivals TTL (Lifecycle)</h2>
+        <p className="sub">Automated cleanup for New Arrivals. Products created longer ago than this TTL will automatically have their "is_new" flag, "New" badge, and "new" tag removed every 24 hours.</p>
+        <div className="adm-form">
+          <div className="adm-field" style={{ maxWidth: 320 }}>
+            <label>New TTL (in days)</label>
+            <input type="number" className="adm-input" min={1} max={365} value={form.new_ttl_days || 30} onChange={(e) => set('new_ttl_days', e.target.value)} />
+            <span style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, display: 'block' }}>e.g. 30 = products created more than 30 days ago will automatically be pruned from New Arrivals.</span>
+          </div>
+        </div>
+      </div>
+      <div className="adm-panel">
         <h2>Social links</h2>
         <p className="sub">Shown as icons in the site footer. Leave a field blank to hide that icon.</p>
         <div className="adm-form">

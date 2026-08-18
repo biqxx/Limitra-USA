@@ -34,6 +34,7 @@ class SiteSettingSeeder extends Seeder
             ['key' => 'home_featured_count',        'value' => '8'],
             ['key' => 'home_resort_count',          'value' => '8'],
             ['key' => 'home_articles_count',        'value' => '6'],
+            ['key' => 'new_ttl_days',               'value' => '30'],
             ['key' => 'newsletter_modal_image',     'value' => 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=800&q=80'],
             ['key' => 'newsletter_popup_delay_ms',  'value' => '3000'],
             ['key' => 'newsletter_popup_cooldown_ms', 'value' => '86400000'],
