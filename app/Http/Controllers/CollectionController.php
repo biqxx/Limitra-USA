@@ -16,7 +16,11 @@ class CollectionController extends Controller
         $catParam = $request->query('cat') ?? $request->query('category');
 
         $products = match($type) {
-            'new' => Product::where('is_new', true)->with(['category', 'subcategory'])->get(),
+            'new' => Product::where(function ($q) {
+                $q->where('is_new', true)
+                  ->orWhereJsonContains('tags', 'new')
+                  ->orWhere('badge', 'like', '%new%');
+            })->with(['category', 'subcategory'])->get(),
             'editors' => Product::where('is_featured', true)->with(['category', 'subcategory'])->get(),
             'trending' => Product::whereNotNull('badge')->with(['category', 'subcategory'])->get(),
             'gifts' => Product::with(['category', 'subcategory'])->get(),
