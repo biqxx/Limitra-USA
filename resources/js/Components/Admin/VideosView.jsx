@@ -306,6 +306,21 @@ export default function VideosAdminView({ videos, productsLookup, onToast }) {
     });
   };
 
+  const moveVideo = (row, dir) => {
+    const list = [...(videos.data || [])];
+    const idx = list.findIndex((v) => v.id === row.id);
+    const targetIdx = idx + dir;
+    if (idx === -1 || targetIdx < 0 || targetIdx >= list.length) return;
+
+    [list[idx], list[targetIdx]] = [list[targetIdx], list[idx]];
+    const newOrder = list.map((v) => v.id);
+
+    router.post('/admin/videos/reorder', { order: newOrder }, {
+      only: ['videos'], preserveState: true, preserveScroll: true,
+      onSuccess: () => onToast('Video display order updated.')
+    });
+  };
+
   const save = (data, isEdit, id) => {
     if (isEdit) {
       router.put('/admin/videos/' + id, data, {
@@ -321,6 +336,49 @@ export default function VideosAdminView({ videos, productsLookup, onToast }) {
   };
 
   const columns = [
+    {
+      key: 'order', label: 'Order', sortable: false, width: 95,
+      render: (v) => {
+        const list = videos.data || [];
+        const rowIdx = list.findIndex((r) => r.id === v.id);
+        const isFirst = rowIdx <= 0;
+        const isLast = rowIdx === -1 || rowIdx >= list.length - 1;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#0d1b2a', minWidth: 22 }}>
+              {String(rowIdx + 1).padStart(2, '0')}
+            </span>
+            <div style={{ display: 'flex', background: '#0d1b2a', borderRadius: 5, padding: 2 }}>
+              <button
+                type="button"
+                onClick={() => moveVideo(v, -1)}
+                disabled={isFirst}
+                title="Move video up on homepage"
+                style={{
+                  background: 'none', border: 'none', color: isFirst ? 'rgba(255,255,255,0.25)' : '#fff',
+                  padding: '3px 5px', cursor: isFirst ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center'
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+              </button>
+              <div style={{ width: 1, background: 'rgba(255,255,255,0.15)' }} />
+              <button
+                type="button"
+                onClick={() => moveVideo(v, 1)}
+                disabled={isLast}
+                title="Move video down on homepage"
+                style={{
+                  background: 'none', border: 'none', color: isLast ? 'rgba(255,255,255,0.25)' : '#fff',
+                  padding: '3px 5px', cursor: isLast ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center'
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+          </div>
+        );
+      }
+    },
     {
       key: 'thumb', label: '', sortable: false, width: 70,
       render: (v) => v.thumb ? <img className="adm-thumb" src={v.thumb} alt="" /> : <span className="adm-thumb ph"><I.image width="16" height="16" /></span>,

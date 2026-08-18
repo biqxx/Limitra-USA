@@ -799,6 +799,20 @@ class AdminController extends Controller
         return $this->queueBulkImport($request, 'videos');
     }
 
+    public function reorderVideos(Request $request)
+    {
+        $request->validate([
+            'order'   => 'required|array',
+            'order.*' => 'required',
+        ]);
+
+        foreach ($request->order as $index => $id) {
+            Video::where('id', $id)->update(['sort_order' => $index + 1]);
+        }
+
+        return back();
+    }
+
     public function bulkImportConversions(Request $request)
     {
         return $this->queueBulkImport($request, 'conversions');
