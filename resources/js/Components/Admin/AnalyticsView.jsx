@@ -114,15 +114,24 @@ export default function AnalyticsView({ analytics }) {
   const byCategory = analytics.salesByCategory || { items: [] };
   const retailers = analytics.retailerRatio || { items: [] };
   const topProducts = analytics.topProducts || { items: [] };
+  const topClickedProducts = analytics.topClickedProducts || { items: [] };
+  const topViewedProducts = analytics.topViewedProducts || { items: [] };
+  const topBrands = analytics.topBrands || { items: [] };
+  const funnel = analytics.conversionFunnel || {};
   const byDevice = analytics.clicksByDevice || { items: [] };
   const sourcePages = analytics.topSourcePages || { items: [] };
   const topArticles = analytics.topArticles || { items: [] };
   const topVideos = analytics.topVideos || { items: [] };
 
+  const [chartMetric, setChartMetric] = useState('sales');
+
   const trendData = (trend.series || []).map((d, i) => ({
     date: d.date.slice(5),
-    sales: d.sales,
-    ma: (trend.moving_average || [])[i],
+    sales: d.sales || 0,
+    orders: d.orders || 0,
+    clicks: d.clicks || 0,
+    commission: d.commission || 0,
+    ma: (trend.moving_average || [])[i] || 0,
   }));
 
   const topCategoryName = byCategory.top_category;
@@ -144,12 +153,25 @@ export default function AnalyticsView({ analytics }) {
     { ic: 'star2', num: fmtUSD(kpis.epc), lab: 'EPC (per click)', hero: true },
   ];
 
+  const getMetricFormat = (val) => {
+    if (chartMetric === 'sales' || chartMetric === 'commission') return fmtUSD(val);
+    return fmtNum(val);
+  };
+
+  const getMetricLabel = () => {
+    if (chartMetric === 'sales') return 'Sales Volume';
+    if (chartMetric === 'orders') return 'Orders Count';
+    if (chartMetric === 'commission') return 'Commission Earned';
+    if (chartMetric === 'clicks') return 'Clicks';
+    return 'Sales';
+  };
+
   return (
     <>
       <div className="adm-head">
         <div>
           <h1>Analytics</h1>
-          <p>Affiliate performance — clicks, conversions, and commission earned.</p>
+          <p>Affiliate performance — sales trends, clicks, conversions, and product views.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button type="button" className="adm-btn adm-btn-ghost" onClick={() => downloadAnalyticsReport(analytics, range)}>
@@ -176,28 +198,135 @@ export default function AnalyticsView({ analytics }) {
         })}
       </div>
 
-      <div className="adm-panel">
-        <div className="adm-chart-head">
-          <h2 style={{ margin: 0 }}>Sales trend</h2>
-          {trend.hasData && (
-            <span className={'adm-badge-delta ' + (trend.change_pct >= 0 ? 'up' : 'down')}>
-              {trend.change_pct >= 0 ? <I.trendUp /> : <I.trendDown />} {Math.abs(trend.change_pct)}% vs prior {range}d
-            </span>
-          )}
+      {funnel.hasData && (
+        <div className="adm-panel" style={{ background: 'linear-gradient(135deg, rgba(207,138,50,0.06), rgba(12,26,45,0.02))' }}>
+          <h2>Conversion Funnel</h2>
+          <p className="sub">Visitor engagement to outbound link clicks and confirmed order conversions.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginTop: 16 }}>
+            <div style={{ padding: 16, background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>1. Product Views</div>
+              <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{fmtNum(funnel.product_views)}</div>
+            </div>
+            <div style={{ padding: 16, background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>2. "Buy Now" Clicks</div>
+              <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: 'var(--accent)' }}>{fmtNum(funnel.buy_now_clicks)}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{fmtPct(funnel.click_through_rate)} CTR</div>
+            </div>
+            <div style={{ padding: 16, background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>3. Confirmed Orders</div>
+              <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: 'var(--brand)' }}>{fmtNum(funnel.orders)}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{fmtPct(funnel.conversion_rate)} Conversion Rate</div>
+            </div>
+            <div style={{ padding: 16, background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>4. Sales Volume</div>
+              <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: 'var(--brand)' }}>{fmtUSD(funnel.sales_volume)}</div>
+            </div>
+          </div>
         </div>
-        <p className="sub">Total sales with a 7-day moving average overlay.</p>
+      )}
+
+      {/* Modern Interactive Sales Graph */}
+      <div className="adm-panel">
+        <div className="adm-chart-head" style={{ flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h2 style={{ margin: 0 }}>Sales & Performance Graph</h2>
+            <p className="sub" style={{ margin: '4px 0 0' }}>Daily sales volume, orders, clicks, and 7-day moving trend.</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {trend.hasData && (
+              <span className={'adm-badge-delta ' + (trend.change_pct >= 0 ? 'up' : 'down')} style={{ marginRight: 8 }}>
+                {trend.change_pct >= 0 ? <I.trendUp /> : <I.trendDown />} {Math.abs(trend.change_pct)}% vs prior {range}d
+              </span>
+            )}
+            <div className="adm-range-switch" style={{ background: 'var(--bg)', padding: 3 }}>
+              <button type="button" className={chartMetric === 'sales' ? 'active' : ''} onClick={() => setChartMetric('sales')}>Sales ($)</button>
+              <button type="button" className={chartMetric === 'orders' ? 'active' : ''} onClick={() => setChartMetric('orders')}>Orders</button>
+              <button type="button" className={chartMetric === 'commission' ? 'active' : ''} onClick={() => setChartMetric('commission')}>Commission</button>
+              <button type="button" className={chartMetric === 'clicks' ? 'active' : ''} onClick={() => setChartMetric('clicks')}>Clicks</button>
+            </div>
+          </div>
+        </div>
+
+        {trend.hasData && (
+          <div style={{ display: 'flex', gap: 24, marginTop: 16, marginBottom: 16, padding: '12px 16px', background: 'var(--bg)', borderRadius: 8, fontSize: 13, flexWrap: 'wrap' }}>
+            <div>
+              <span style={{ color: 'var(--muted)' }}>Avg. Daily Sales: </span>
+              <strong>{fmtUSD(trend.avg_daily_sales)}</strong>
+            </div>
+            <div>
+              <span style={{ color: 'var(--muted)' }}>Peak Day Sales: </span>
+              <strong style={{ color: 'var(--accent)' }}>{fmtUSD(trend.peak_sales)}</strong>
+              {trend.peak_date && <span style={{ color: 'var(--muted)', fontSize: 12 }}> ({trend.peak_date})</span>}
+            </div>
+          </div>
+        )}
+
         {!trend.hasData ? <AnalyticsEmpty /> : (
-          <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={trendData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={trendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="var(--accent)" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={{ stroke: 'var(--line)' }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} width={60} tickFormatter={(v) => `$${Math.round(v)}`} />
-              <Tooltip formatter={(v, name) => [fmtUSD(v), name === 'sales' ? 'Sales' : '7-day avg']} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12.5 }} />
-              <Area type="monotone" dataKey="sales" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.16} strokeWidth={2} />
-              <Line type="monotone" dataKey="ma" stroke="var(--brand)" strokeWidth={2} dot={false} strokeDasharray="5 3" />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} width={60} tickFormatter={(v) => chartMetric === 'sales' || chartMetric === 'commission' ? `$${Math.round(v)}` : fmtNum(v)} />
+              <Tooltip
+                formatter={(v, name) => [
+                  getMetricFormat(v),
+                  name === chartMetric ? getMetricLabel() : '7-day avg'
+                ]}
+                contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12.5 }}
+              />
+              <Area type="monotone" dataKey={chartMetric} stroke="var(--accent)" fill="url(#salesGrad)" strokeWidth={2.5} activeDot={{ r: 6, strokeWidth: 2, fill: 'var(--surface)' }} />
+              {chartMetric === 'sales' && (
+                <Line type="monotone" dataKey="ma" stroke="var(--brand)" strokeWidth={2} dot={false} strokeDasharray="5 3" />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         )}
+      </div>
+
+      <div className="adm-grid2">
+        <div className="adm-panel">
+          <h2>Most clicked "Buy Now" products</h2>
+          <p className="sub">Products generating the highest affiliate link outbound clicks.</p>
+          {!topClickedProducts.hasData ? <AnalyticsEmpty label="No product clicks recorded yet in this range." /> : (
+            <div className="adm-legend">
+              {topClickedProducts.items.map((p) => (
+                <div className="row" key={p.id}>
+                  {p.image ? <img src={p.image} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} /> : <span className="adm-thumb ph" style={{ width: 32, height: 32 }}><I.image width="14" height="14" /></span>}
+                  <div style={{ marginLeft: 9, flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{p.brand}</div>
+                    <div className="name">{p.name}</div>
+                  </div>
+                  <span className="pct" style={{ color: 'var(--accent)', fontWeight: 700 }}>{fmtNum(p.clicks)} clicks</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="adm-panel">
+          <h2>Most viewed product pages</h2>
+          <p className="sub">Products with the highest detail page views.</p>
+          {!topViewedProducts.hasData ? <AnalyticsEmpty label="No product views recorded yet in this range." /> : (
+            <div className="adm-legend">
+              {topViewedProducts.items.map((p) => (
+                <div className="row" key={p.id}>
+                  {p.image ? <img src={p.image} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} /> : <span className="adm-thumb ph" style={{ width: 32, height: 32 }}><I.image width="14" height="14" /></span>}
+                  <div style={{ marginLeft: 9, flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{p.brand}</div>
+                    <div className="name">{p.name}</div>
+                  </div>
+                  <span className="pct">{fmtNum(p.views)} views</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="adm-grid2">
@@ -293,15 +422,15 @@ export default function AnalyticsView({ analytics }) {
 
       <div className="adm-grid2">
         <div className="adm-panel">
-          <h2>Top articles</h2>
-          <p className="sub">Most-viewed Journal posts in this window.</p>
+          <h2>Top journals / articles</h2>
+          <p className="sub">Most-read Journal posts in this window.</p>
           {!topArticles.hasData ? <AnalyticsEmpty label="No article views yet in this range." /> : (
             <div className="adm-legend">
               {topArticles.items.map((a) => (
                 <div className="row" key={a.slug}>
                   {a.img ? <img src={a.img} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} /> : <span className="adm-thumb ph" style={{ width: 32, height: 32 }}><I.image width="14" height="14" /></span>}
                   <span className="name" style={{ marginLeft: 9 }}>{a.title}</span>
-                  <span className="pct">{fmtNum(a.views)}</span>
+                  <span className="pct">{fmtNum(a.views)} reads</span>
                 </div>
               ))}
             </div>
@@ -317,7 +446,7 @@ export default function AnalyticsView({ analytics }) {
                 <div className="row" key={i}>
                   {v.thumb ? <img src={v.thumb} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} /> : <span className="adm-thumb ph" style={{ width: 32, height: 32 }}><I.image width="14" height="14" /></span>}
                   <span className="name" style={{ marginLeft: 9 }}>{v.title}</span>
-                  <span className="pct">{fmtNum(v.views)}</span>
+                  <span className="pct">{fmtNum(v.views)} views</span>
                 </div>
               ))}
             </div>

@@ -5,16 +5,15 @@ namespace App\Services;
 use App\Models\ArticleView;
 use App\Models\Click;
 use App\Models\Conversion;
+use App\Models\Product;
+use App\Models\ProductView;
 use App\Models\VideoView;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Builds the Admin Analytics Dashboard payload from real clicks/conversions/
- * article_views/video_views. Every widget's `hasData` flag reflects whether
- * that query actually returned rows — until real traffic/imports accumulate,
- * widgets correctly show their "No conversions yet in this range" state
- * instead of fabricating numbers.
+ * article_views/video_views/product_views.
  */
 class AnalyticsService
 {
@@ -29,6 +28,10 @@ class AnalyticsService
             'salesByCategory' => $this->salesByCategory($days),
             'retailerRatio' => $this->retailerRatio($days),
             'topProducts' => $this->topProducts($days),
+            'topClickedProducts' => $this->topClickedProducts($days),
+            'topViewedProducts' => $this->topViewedProducts($days),
+            'topBrands' => $this->topBrands($days),
+            'conversionFunnel' => $this->conversionFunnel($days),
             'clicksByDevice' => $this->clicksByDevice($days),
             'topSourcePages' => $this->topSourcePages($days),
             'topArticles' => $this->topArticles($days),
@@ -128,7 +131,13 @@ class AnalyticsService
     private function salesTrend(int $days): array
     {
         $rows = $this->dailySeries($days);
-        $series = array_map(fn ($r) => ['date' => $r['date'], 'sales' => $r['sale_amount']], $rows);
+        $series = array_map(fn ($r) => [
+            'date' => $r['date'],
+            'sales' => (float) $r['sale_amount'],
+            'orders' => (int) $r['orders'],
+            'clicks' => (int) $r['clicks'],
+            'commission' => (float) $r['commission_amount'],
+        ], $rows);
 
         $values = array_column($series, 'sales');
         $movingAverage = [];
@@ -142,11 +151,25 @@ class AnalyticsService
         $priorTotal = array_sum(array_column(array_slice($priorRows, 0, $days), 'sale_amount'));
         $changePct = $priorTotal > 0 ? round((($currentTotal - $priorTotal) / $priorTotal) * 100, 1) : 0.0;
 
+        $peakSales = 0.0;
+        $peakDate = null;
+        foreach ($series as $s) {
+            if ($s['sales'] >= $peakSales) {
+                $peakSales = $s['sales'];
+                $peakDate = $s['date'];
+            }
+        }
+
+        $hasData = $currentTotal > 0 || array_sum(array_column($series, 'clicks')) > 0;
+
         return [
             'series' => $series,
             'moving_average' => $movingAverage,
             'change_pct' => $changePct,
-            'hasData' => $currentTotal > 0,
+            'peak_sales' => $peakSales,
+            'peak_date' => $peakDate,
+            'avg_daily_sales' => count($values) > 0 ? round($currentTotal / count($values), 2) : 0.0,
+            'hasData' => $hasData,
         ];
     }
 
@@ -371,5 +394,129 @@ class AnalyticsService
         ]);
 
         return ['items' => $items->all(), 'hasData' => true];
+    }
+
+    /** Most clicked products ("Buy Now" / affiliate link outbound clicks). */
+    private function topClickedProducts(int $days): array
+    {
+        $since = $this->since($days);
+        $rows = Click::query()
+            ->join('products', 'products.id', '=', 'clicks.product_id')
+            ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+            ->where('clicks.created_at', '>=', $since)
+            ->selectRaw('products.id as id, products.name as name, products.brand as brand, products.image as image,
+                products.price as price, categories.name as category, COUNT(*) as clicks')
+            ->groupBy('products.id', 'products.name', 'products.brand', 'products.image', 'products.price', 'categories.name')
+            ->orderByDesc('clicks')
+            ->take(5)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return ['items' => [], 'hasData' => false];
+        }
+
+        $items = $rows->map(fn ($r) => [
+            'id' => $r->id,
+            'name' => $r->name,
+            'brand' => $r->brand,
+            'image' => $r->image,
+            'price' => $r->price,
+            'category' => $r->category,
+            'clicks' => (int) $r->clicks,
+        ]);
+
+        return ['items' => $items->all(), 'hasData' => true];
+    }
+
+    /** Most viewed product pages. */
+    private function topViewedProducts(int $days): array
+    {
+        $since = $this->since($days);
+        $rows = ProductView::query()
+            ->join('products', 'products.id', '=', 'product_views.product_id')
+            ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+            ->where('product_views.created_at', '>=', $since)
+            ->selectRaw('products.id as id, products.name as name, products.brand as brand, products.image as image,
+                products.price as price, categories.name as category, COUNT(*) as views')
+            ->groupBy('products.id', 'products.name', 'products.brand', 'products.image', 'products.price', 'categories.name')
+            ->orderByDesc('views')
+            ->take(5)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return ['items' => [], 'hasData' => false];
+        }
+
+        $items = $rows->map(fn ($r) => [
+            'id' => $r->id,
+            'name' => $r->name,
+            'brand' => $r->brand,
+            'image' => $r->image,
+            'price' => $r->price,
+            'category' => $r->category,
+            'views' => (int) $r->views,
+        ]);
+
+        return ['items' => $items->all(), 'hasData' => true];
+    }
+
+    /** Top performing product brands by clicks & sales. */
+    private function topBrands(int $days): array
+    {
+        $since = $this->since($days);
+        $rows = Click::query()
+            ->join('products', 'products.id', '=', 'clicks.product_id')
+            ->where('clicks.created_at', '>=', $since)
+            ->whereNotNull('products.brand')
+            ->where('products.brand', '!=', '')
+            ->selectRaw('products.brand as brand, COUNT(*) as clicks')
+            ->groupBy('products.brand')
+            ->orderByDesc('clicks')
+            ->take(5)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return ['items' => [], 'hasData' => false];
+        }
+
+        $items = $rows->map(fn ($r) => [
+            'brand' => $r->brand,
+            'clicks' => (int) $r->clicks,
+        ]);
+
+        return ['items' => $items->all(), 'hasData' => true];
+    }
+
+    /** High-level sales & engagement conversion funnel. */
+    private function conversionFunnel(int $days): array
+    {
+        $since = $this->since($days);
+        $sinceDate = $since->toDateString();
+
+        $productViews = ProductView::where('created_at', '>=', $since)->count();
+        $buyNowClicks = Click::where('created_at', '>=', $since)->count();
+
+        $conversions = Conversion::where('order_date', '>=', $sinceDate)
+            ->where('status', '!=', 'reversed')
+            ->selectRaw('COUNT(*) as orders, SUM(sale_amount) as sales, SUM(commission_amount) as commission')
+            ->first();
+
+        $orders = (int) ($conversions->orders ?? 0);
+        $sales = (float) ($conversions->sales ?? 0);
+        $commission = (float) ($conversions->commission ?? 0);
+
+        $clickRate = $productViews > 0 ? round(($buyNowClicks / $productViews) * 100, 1) : 0.0;
+        $conversionRate = $buyNowClicks > 0 ? round(($orders / $buyNowClicks) * 100, 1) : 0.0;
+
+        return [
+            'product_views' => $productViews,
+            'buy_now_clicks' => $buyNowClicks,
+            'orders' => $orders,
+            'sales_volume' => round($sales, 2),
+            'commission_earned' => round($commission, 2),
+            'click_through_rate' => $clickRate,
+            'conversion_rate' => $conversionRate,
+            'hasData' => ($productViews > 0 || $buyNowClicks > 0 || $orders > 0),
+        ];
     }
 }
