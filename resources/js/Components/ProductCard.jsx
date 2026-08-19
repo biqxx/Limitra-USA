@@ -112,8 +112,25 @@ export function CategoryGrid({ categories }) {
   );
 }
 
+// Helper to fetch product image and construct a File object for native sharing with media
+async function fetchProductImageFile(imgUrl, name) {
+  if (!imgUrl) return null;
+  try {
+    const res = await fetch(imgUrl, { mode: 'cors' });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const mimeType = blob.type || 'image/jpeg';
+    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    const safeName = `${(name || 'product').replace(/[^a-z0-9_-]/gi, '_').slice(0, 30)}.${ext}`;
+    return new File([blob], safeName, { type: mimeType });
+  } catch (_) {
+    return null;
+  }
+}
+
 export function ShareRow({ product }) {
   const [toast, setToast] = useState(null);
+  const [sharing, setSharing] = useState(false);
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const baseUrl = `${origin}/product/${product.slug || product.id}`;
   const text = `${product.name} by ${product.brand} — found on Limitra`;
@@ -136,24 +153,43 @@ export function ShareRow({ product }) {
     setTimeout(() => setToast(null), 1800);
   };
 
-  // Instagram and TikTok have no public web "share" URL the way Facebook/X/Pinterest do —
-  // clicking those used to just copy the link with no real path into either app, which reads
-  // as "the button doesn't work". Where the OS supports it (mobile Chrome/Safari, some
-  // desktop browsers), the native Web Share sheet lists the actual installed apps — Instagram
-  // Stories/DM, TikTok, WhatsApp, Messages, etc. — as real share destinations. Falls back to
-  // the old copy+toast behavior wherever navigator.share isn't available (most desktops), and
-  // on any share failure that isn't the user simply cancelling the sheet.
+  // Instagram, TikTok, and modern mobile/desktop Web Share sheets allow attaching the actual
+  // product image file directly into the post/story/message. Falls back to URL/text share if
+  // image attachment is unsupported, and to copy+toast if navigator.share is unavailable.
   const shareOrCopy = async (t) => {
     const url = socialUrl(t.key);
-    if (navigator.share) {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      setSharing(true);
       try {
-        await navigator.share({ title: product.name, text, url });
+        const shareData = { title: product.name, text, url };
+
+        // If product has an image, fetch and attach as real File to the native post
+        if (absoluteImage && typeof navigator.canShare === 'function') {
+          try {
+            const imageFile = await fetchProductImageFile(absoluteImage, product.slug || product.name);
+            if (imageFile && navigator.canShare({ files: [imageFile] })) {
+              shareData.files = [imageFile];
+            }
+          } catch (_) {}
+        }
+
+        await navigator.share(shareData);
+        setSharing(false);
         return;
       } catch (e) {
-        if (e && e.name === 'AbortError') return; // user closed the share sheet — not a failure
+        setSharing(false);
+        if (e && e.name === 'AbortError') return; // user closed share sheet
+        // If file attachment wasn't accepted by the OS, retry text/url share
+        try {
+          await navigator.share({ title: product.name, text, url });
+          return;
+        } catch (e2) {
+          if (e2 && e2.name === 'AbortError') return;
+        }
       }
     }
-    await copyUrl(url, t.copy);
+    setSharing(false);
+    await copyUrl(url, t.copy || 'Link copied to clipboard');
   };
 
   const targets = [
@@ -164,14 +200,27 @@ export function ShareRow({ product }) {
     { key: "pinterest", label: "Pinterest", href: `https://pinterest.com/pin/create/button/?url=${enc(socialUrl('pinterest'))}&description=${enc(text)}${absoluteImage ? `&media=${enc(absoluteImage)}` : ''}` },
   ];
 
+  const hasNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
   return (
     <div className="share-row">
       <span className="share-label">Share</span>
+      {hasNativeShare && (
+        <button
+          className="share-btn"
+          onClick={() => shareOrCopy({ key: "native", label: "Share", copy: "Link copied to clipboard" })}
+          aria-label="Share product with image"
+          title="Share product with image"
+          disabled={sharing}
+        >
+          <I.share />
+        </button>
+      )}
       <button className="share-btn" onClick={() => copyUrl(baseUrl)} aria-label="Copy link" title="Copy link"><I.link /></button>
       {targets.map((t) => {
         const Icon = I[t.key];
         return t.copy ? (
-          <button className="share-btn" key={t.key} onClick={() => shareOrCopy(t)} aria-label={`Share on ${t.label}`} title={t.label}>
+          <button className="share-btn" key={t.key} onClick={() => shareOrCopy(t)} aria-label={`Share on ${t.label}`} title={t.label} disabled={sharing}>
             <Icon />
           </button>
         ) : (

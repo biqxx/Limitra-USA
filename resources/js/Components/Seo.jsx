@@ -13,6 +13,7 @@ export default function Seo({ title, description, image, type = 'website', noInd
   // origin at render time rather than baking in a domain, so this never goes stale either.
   const rawImg = image || DEFAULT_IMG;
   const img = typeof window !== 'undefined' && rawImg.startsWith('/') ? `${window.location.origin}${rawImg}` : rawImg;
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 
   return (
     <Head>
@@ -23,6 +24,7 @@ export default function Seo({ title, description, image, type = 'website', noInd
       <meta property="og:title" content={fullTitle} />
       <meta property="og:description" content={desc} />
       <meta property="og:image" content={img} />
+      {currentUrl && <meta property="og:url" content={currentUrl} />}
       <meta property="og:type" content={type} />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={fullTitle} />
