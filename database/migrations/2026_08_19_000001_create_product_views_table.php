@@ -10,7 +10,8 @@ return new class extends Migration
     {
         Schema::create('product_views', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('product_id')->constrained('products')->cascadeOnDelete();
+            $table->string('product_id');
+            $table->foreign('product_id')->references('id')->on('products')->cascadeOnDelete();
             $table->string('source_page')->nullable();
             $table->string('device', 20)->nullable();
             $table->timestamps();
