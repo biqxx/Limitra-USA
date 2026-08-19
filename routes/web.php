@@ -14,11 +14,15 @@ use App\Http\Controllers\GuidesController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\RedirectController;
+use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\StyleLookController;
 use App\Http\Controllers\SubcategoryController;
 use App\Http\Controllers\VideoViewController;
 use Illuminate\Support\Facades\Route;
+
+// Sitemap
+Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('sitemap');
 
 // Storefront
 Route::get('/', [HomeController::class, 'index'])->name('home');
