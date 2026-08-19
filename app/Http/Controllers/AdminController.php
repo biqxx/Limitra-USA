@@ -855,4 +855,15 @@ class AdminController extends Controller
         return response()->json(['token' => $token]);
     }
 
+    /** Triggers the media:prune-orphans Artisan command to clean up unused uploads. */
+    public function pruneOrphanedMedia()
+    {
+        \Artisan::call('media:prune-orphans', ['--force' => true]);
+        $output = \Artisan::output();
+
+        return response()->json([
+            'message' => 'Orphaned media cleanup completed.',
+            'output' => trim($output),
+        ]);
+    }
 }

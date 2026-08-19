@@ -116,6 +116,7 @@ Route::middleware('admin')->group(function () {
 
     Route::put('/admin/settings', [AdminController::class, 'updateSettings'])->name('admin.settings.update');
     Route::post('/admin/settings/extension-token/regenerate', [AdminController::class, 'regenerateExtensionToken'])->name('admin.settings.extension-token.regenerate');
+    Route::post('/admin/media/prune-orphans', [AdminController::class, 'pruneOrphanedMedia'])->name('admin.media.prune');
 
     // Lightweight, unpaginated lookups — every row, but only the fields needed for
     // the cross-editor product picker, slug/key-uniqueness checks, and bulk-import

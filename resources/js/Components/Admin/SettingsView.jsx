@@ -167,7 +167,9 @@ export default function SettingsView({ settings, onToast }) {
   const [imgBusy, bumpImgBusy] = useUploadBusy();
   const [slidesBusy, setSlidesBusy] = useState(false);
   const [tokenBusy, setTokenBusy] = useState(false);
-  const anyBusy = imgBusy || slidesBusy;
+  const [pruneBusy, setPruneBusy] = useState(false);
+  const [pruneResult, setPruneResult] = useState(null);
+  const anyBusy = imgBusy || slidesBusy || pruneBusy;
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const save = () => {
     router.put('/admin/settings', form, {
@@ -330,6 +332,41 @@ export default function SettingsView({ settings, onToast }) {
               </button>
             </div>
             <span style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, display: 'block' }}>Generating a new token immediately invalidates the old one — any extension still using it will get a 401 until updated.</span>
+          </div>
+        </div>
+      </div>
+      <div className="adm-panel">
+        <h2>Storage & Media Maintenance</h2>
+        <p className="sub">Scan storage for uploaded images or videos that are no longer referenced by any product, article, guide, video, look, or page, and delete them to free disk space.</p>
+        <div className="adm-form">
+          <div className="adm-field">
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="adm-btn adm-btn-ghost"
+                disabled={pruneBusy}
+                onClick={async () => {
+                  if (!confirm('Scan storage and delete all unreferenced/orphaned image & video files?')) return;
+                  setPruneBusy(true);
+                  setPruneResult(null);
+                  try {
+                    const res = await postJSON('/admin/media/prune-orphans', {});
+                    setPruneResult(res.output || res.message || 'Pruning completed.');
+                  } catch (err) {
+                    setPruneResult(`Failed: ${err.message}`);
+                  } finally {
+                    setPruneBusy(false);
+                  }
+                }}
+              >
+                <I.trash /> {pruneBusy ? 'Scanning & Pruning…' : 'Prune Orphaned Media Files'}
+              </button>
+            </div>
+            {pruneResult && (
+              <pre style={{ marginTop: 12, padding: '12px 14px', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12.5, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                {pruneResult}
+              </pre>
+            )}
           </div>
         </div>
       </div>
