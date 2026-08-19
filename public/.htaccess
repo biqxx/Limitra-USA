@@ -23,3 +23,89 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Brotli compression (mod_brotli — available on Apache 2.4.26+)
+# Only activates if the module is loaded; safe to leave in if not installed.
+# ──────────────────────────────────────────────────────────────────────────────
+<IfModule mod_brotli.c>
+    AddOutputFilterByType BROTLI_COMPRESS \
+        text/html \
+        text/plain \
+        text/css \
+        text/javascript \
+        text/xml \
+        application/javascript \
+        application/x-javascript \
+        application/json \
+        application/xml \
+        application/rss+xml \
+        application/atom+xml \
+        image/svg+xml \
+        font/ttf \
+        font/otf \
+        font/woff \
+        font/woff2
+
+    # Vary header tells CDNs/proxies to cache compressed and uncompressed separately
+    Header append Vary Accept-Encoding
+</IfModule>
+
+# ──────────────────────────────────────────────────────────────────────────────
+# gzip compression (mod_deflate — standard on virtually every Apache install)
+# Falls back to this if Brotli is not available.
+# ──────────────────────────────────────────────────────────────────────────────
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE \
+        text/html \
+        text/plain \
+        text/css \
+        text/javascript \
+        text/xml \
+        application/javascript \
+        application/x-javascript \
+        application/json \
+        application/xml \
+        application/rss+xml \
+        application/atom+xml \
+        image/svg+xml \
+        font/ttf \
+        font/otf \
+        font/woff \
+        font/woff2
+
+    # Vary header tells CDNs/proxies to cache compressed and uncompressed separately
+    Header append Vary Accept-Encoding
+
+    # Strip broken Accept-Encoding from some old proxies
+    <IfModule mod_setenvif.c>
+        BrowserMatch ^Mozilla/4 gzip-only-text/html
+        BrowserMatch ^Mozilla/4\.0[678] no-gzip
+        BrowserMatch \bMSIE !no-gzip !gzip-only-text/html
+    </IfModule>
+</IfModule>
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Browser caching for static assets (improves repeat-visit performance)
+# ──────────────────────────────────────────────────────────────────────────────
+<IfModule mod_expires.c>
+    ExpiresActive On
+
+    # Vite-built assets have content hashes in filenames — cache aggressively
+    <FilesMatch "\.(js|css)$">
+        ExpiresDefault "access plus 1 year"
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+
+    # Images and fonts
+    <FilesMatch "\.(jpg|jpeg|png|gif|webp|svg|ico|woff|woff2|ttf|otf)$">
+        ExpiresDefault "access plus 6 months"
+        Header set Cache-Control "public, max-age=15552000"
+    </FilesMatch>
+
+    # HTML, JSON, XML — short cache; content changes often
+    <FilesMatch "\.(html|htm|json|xml)$">
+        ExpiresDefault "access plus 1 hour"
+        Header set Cache-Control "public, max-age=3600, must-revalidate"
+    </FilesMatch>
+</IfModule>
