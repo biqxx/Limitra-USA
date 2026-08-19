@@ -87,10 +87,14 @@ function ChatProdCard({ p }) {
   return (
     <a href={`/product/${p.slug || p.id}`} className="chat-prod-card" target="_blank" rel="noopener">
       <div className="cpc-img">
-        {p.image && <img src={p.image} alt={p.name} />}
+        {p.image ? (
+          <img src={p.image} alt={p.name} loading="lazy" />
+        ) : (
+          <div style={{ width: "100%", height: "100%", background: "var(--card)" }} />
+        )}
       </div>
       <div className="cpc-body">
-        <span className="cpc-cat">{p.subcategory}</span>
+        <span className="cpc-cat">{p.subcategory || p.category || p.brand}</span>
         <span className="cpc-name">{p.name}</span>
         <span className="cpc-cta">Buy Now →</span>
       </div>
@@ -109,7 +113,7 @@ function TypingDots() {
   );
 }
 
-function ChatMessage({ msg, catalog, isLast, onSuggestion }) {
+function ChatMessage({ msg, catalog, productsMap, isLast, onSuggestion }) {
   if (msg.role === "user") {
     return (
       <div className="chat-msg user">
@@ -138,8 +142,8 @@ function ChatMessage({ msg, catalog, isLast, onSuggestion }) {
               // Text segment
               return renderTextBlock(part, `t${i}`, listCounter);
             }
-            // Product ID — look it up in the catalog and render the card
-            const product = catalog?.find((p) => p.id === part);
+            // Product ID — look it up in productsMap or catalog and render the card
+            const product = productsMap?.[part] || catalog?.find((p) => p.id === part);
             return product ? (
               <div key={`p${i}`} className="chat-prod-inline">
                 <ChatProdCard p={product} />
@@ -176,6 +180,8 @@ function getCsrfToken() {
   return meta ? meta.getAttribute('content') : '';
 }
 
+const CHAT_PRODUCTS_STORAGE = "limitra.chat.products.v1";
+
 function ChatPanel({ onClose, catalog, onMouseDown }) {
   const { props } = usePage();
   const user = props.auth?.user || null;
@@ -185,6 +191,9 @@ function ChatPanel({ onClose, catalog, onMouseDown }) {
     if (user) return [];
     try { return JSON.parse(localStorage.getItem(CHAT_STORAGE) || "[]"); } catch (e) { return []; }
   });
+  const [productsMap, setProductsMap] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(CHAT_PRODUCTS_STORAGE) || "{}"); } catch (e) { return {}; }
+  });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -193,6 +202,11 @@ function ChatPanel({ onClose, catalog, onMouseDown }) {
   const inputRef = useRef(null);
 
   const messages = history.length > 0 ? history : [];
+
+  // Persist productsMap to localStorage so past session history renders rich cards immediately
+  useEffect(() => {
+    try { localStorage.setItem(CHAT_PRODUCTS_STORAGE, JSON.stringify(productsMap)); } catch (e) {}
+  }, [productsMap]);
 
   // Site-wide, hourly-refreshed starter suggestions (same for every visitor) — replaces
   // the fixed list with prompts reflecting what customers have actually been asking about
@@ -205,6 +219,37 @@ function ChatPanel({ onClose, catalog, onMouseDown }) {
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  // Check history for any <product:ID> tags that aren't in productsMap yet, and batch fetch them
+  useEffect(() => {
+    const missingIds = new Set();
+    messages.forEach((m) => {
+      if (!m.content) return;
+      const matches = m.content.matchAll(/<product:([a-z0-9_-]+)>/gi);
+      for (const match of matches) {
+        const id = match[1];
+        if (id && !productsMap[id] && !catalog?.some((p) => p.id === id)) {
+          missingIds.add(id);
+        }
+      }
+    });
+
+    if (missingIds.size > 0) {
+      const idsQuery = Array.from(missingIds).join(',');
+      fetch(`/api/chat/products?ids=${encodeURIComponent(idsQuery)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (Array.isArray(d.products) && d.products.length) {
+            setProductsMap((prev) => {
+              const next = { ...prev };
+              d.products.forEach((p) => { if (p && p.id) next[p.id] = p; });
+              return next;
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -294,6 +339,13 @@ function ChatPanel({ onClose, catalog, onMouseDown }) {
           try {
             const parsed = JSON.parse(raw);
             if (parsed.error) throw new Error(parsed.error);
+            if (parsed.products && Array.isArray(parsed.products)) {
+              setProductsMap((prev) => {
+                const nextMap = { ...prev };
+                parsed.products.forEach((p) => { if (p && p.id) nextMap[p.id] = p; });
+                return nextMap;
+              });
+            }
             if (parsed.text) {
               full += parsed.text;
               setHistory((prev) => {
@@ -375,7 +427,7 @@ function ChatPanel({ onClose, catalog, onMouseDown }) {
           </div>
         ) : (
           messages.filter(m => m.content).map((msg, i, arr) => (
-            <ChatMessage key={i} msg={msg} catalog={catalog} isLast={i === arr.length - 1} onSuggestion={send} />
+            <ChatMessage key={i} msg={msg} catalog={catalog} productsMap={productsMap} isLast={i === arr.length - 1} onSuggestion={send} />
           ))
         )}
         {loading && history.length > 0 && history[history.length - 1]?.content === '' && <TypingDots />}

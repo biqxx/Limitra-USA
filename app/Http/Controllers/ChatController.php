@@ -119,11 +119,13 @@ class ChatController extends Controller
         // entirely or found no search terms, degrading to the existing no-match fallback)
         $products = [];
         $tokenMap = [];
+        $clientProducts = [];
         if ($scan['needs_products'] && ! empty($scan['search'])) {
             Log::info('[Chat] Step 2 — searching products', ['search' => $scan['search']]);
             $result   = $this->searchProducts($scan['search']);
             $products = $result['products'];
             $tokenMap = $result['map'];
+            $clientProducts = $result['client_products'] ?? [];
             Log::info('[Chat] Product search complete', ['products_found' => count($products)]);
         } else {
             Log::info('[Chat] Step 2 — skipped (no product search needed)');
@@ -140,11 +142,12 @@ class ChatController extends Controller
         $journalTokenMap = [];
         if ($scan['needs_journals'] && ! empty($scan['journal_search'])) {
             Log::info('[Chat] Step 2b — searching journals', ['search' => $scan['journal_search']]);
-            $jresult = $this->searchJournals($scan['journal_search'], $products, $tokenMap);
+            $jresult = $this->searchJournals($scan['journal_search'], $products, $tokenMap, $clientProducts);
             $journals = $jresult['journals'];
             $journalTokenMap = $jresult['map'];
             $products = $jresult['products'];
             $tokenMap = $jresult['token_map'];
+            $clientProducts = $jresult['client_products'] ?? $clientProducts;
             Log::info('[Chat] Journal search complete', ['journals_found' => count($journals)]);
         } else {
             Log::info('[Chat] Step 2b — skipped (no journal search needed)');
@@ -177,8 +180,13 @@ class ChatController extends Controller
 
         Log::info('[Chat] Step 3 — starting stream');
 
-        return response()->stream(function () use ($provider, $system, $groundedMessages, $tokenMap, $journalTokenMap, $user, $lastMsg) {
+        return response()->stream(function () use ($provider, $system, $groundedMessages, $tokenMap, $journalTokenMap, $clientProducts, $user, $lastMsg) {
             while (ob_get_level() > 0) ob_end_flush();
+
+            if (! empty($clientProducts)) {
+                echo 'data: ' . json_encode(['products' => array_values($clientProducts)]) . "\n\n";
+                flush();
+            }
 
             // Buffers a possible partial "<product:...>" tag or "[label](journal:...)" link
             // across chunk boundaries, then substitutes the short token the AI used (e.g.
@@ -322,6 +330,32 @@ class ChatController extends Controller
     public function starters()
     {
         return response()->json(['starters' => $this->trendingStarters()]);
+    }
+
+    /** Batch product lookup for chat widget historical items by IDs. */
+    public function productsByIds(Request $request)
+    {
+        $ids = array_filter(explode(',', (string) $request->query('ids', '')));
+        if (empty($ids)) {
+            return response()->json(['products' => []]);
+        }
+
+        $products = Product::with(['category', 'subcategory'])
+            ->whereIn('id', array_slice($ids, 0, 50))
+            ->get()
+            ->map(fn ($p) => [
+                'id'          => (string) $p->id,
+                'slug'        => $p->slug,
+                'name'        => $p->name,
+                'brand'       => $p->brand ?? 'Limitra Select',
+                'category'    => $p->category?->name,
+                'subcategory' => $p->subcategory?->name,
+                'price'       => $p->price,
+                'image'       => $p->image,
+                'affiliate_url' => $p->affiliate_url,
+            ]);
+
+        return response()->json(['products' => $products]);
     }
 
     // ── Trending starters ─────────────────────────────────────────────────────
@@ -760,9 +794,23 @@ EOF;
         // data boundary the model can be strictly instructed to stay within, rather than prose
         // it might paraphrase or blend with outside knowledge.
         $map = [];
-        $structured = $products->map(function ($p, $i) use (&$map) {
+        $clientProducts = [];
+        $structured = $products->map(function ($p, $i) use (&$map, &$clientProducts) {
             $token = 'p' . ($i + 1);
-            $map[$token] = (string) $p->id;
+            $pid = (string) $p->id;
+            $map[$token] = $pid;
+
+            $clientProducts[$pid] = [
+                'id'          => $pid,
+                'slug'        => $p->slug,
+                'name'        => $p->name,
+                'brand'       => $p->brand ?? 'Limitra Select',
+                'category'    => $p->category?->name,
+                'subcategory' => $p->subcategory?->name,
+                'price'       => $p->price,
+                'image'       => $p->image,
+                'affiliate_url' => $p->affiliate_url,
+            ];
 
             return [
                 'id'          => $token,
@@ -774,7 +822,7 @@ EOF;
             ];
         })->values()->toArray();
 
-        return ['products' => $structured, 'map' => $map];
+        return ['products' => $structured, 'map' => $map, 'client_products' => $clientProducts];
     }
 
     /** Replaces AI-typed <product:TOKEN> short tokens with the real product ID. */
@@ -799,9 +847,9 @@ EOF;
      * order) — so a product a journal recommends can be <product:TOKEN> tagged exactly
      * like any other, and never gets a second, colliding token if it's already in the pool.
      *
-     * @return array{journals: array, map: array<string,string>, products: array, token_map: array<string,string>}
+     * @return array{journals: array, map: array<string,string>, products: array, token_map: array<string,string>, client_products: array}
      */
-    private function searchJournals(array $search, array $products = [], array $tokenMap = []): array
+    private function searchJournals(array $search, array $products = [], array $tokenMap = [], array $clientProducts = []): array
     {
         $query = Article::query();
 
@@ -832,11 +880,11 @@ EOF;
                 'sql'   => $query->toSql(),
                 'file'  => $e->getFile() . ':' . $e->getLine(),
             ]);
-            return ['journals' => [], 'map' => [], 'products' => $products, 'token_map' => $tokenMap];
+            return ['journals' => [], 'map' => [], 'products' => $products, 'token_map' => $tokenMap, 'client_products' => $clientProducts];
         }
 
         if ($candidates->isEmpty()) {
-            return ['journals' => [], 'map' => [], 'products' => $products, 'token_map' => $tokenMap];
+            return ['journals' => [], 'map' => [], 'products' => $products, 'token_map' => $tokenMap, 'client_products' => $clientProducts];
         }
 
         $journals = $candidates
@@ -878,7 +926,7 @@ EOF;
         $nextTokenNum  = count($tokenMap);
 
         $map = [];
-        $structured = $journals->map(function ($a, $i) use (&$map, &$products, &$tokenMap, &$realIdToToken, &$nextTokenNum) {
+        $structured = $journals->map(function ($a, $i) use (&$map, &$products, &$tokenMap, &$realIdToToken, &$nextTokenNum, &$clientProducts) {
             $token = 'j' . ($i + 1);
             $map[$token] = $a->slug;
 
@@ -892,6 +940,18 @@ EOF;
             if (! empty($productIds)) {
                 foreach (Product::whereIn('id', $productIds)->get() as $p) {
                     $pid = (string) $p->id;
+
+                    $clientProducts[$pid] = [
+                        'id'          => $pid,
+                        'slug'        => $p->slug,
+                        'name'        => $p->name,
+                        'brand'       => $p->brand ?? 'Limitra Select',
+                        'category'    => $p->category?->name,
+                        'subcategory' => $p->subcategory?->name,
+                        'price'       => $p->price,
+                        'image'       => $p->image,
+                        'affiliate_url' => $p->affiliate_url,
+                    ];
 
                     if (isset($realIdToToken[$pid])) {
                         $productTokens[] = $realIdToToken[$pid];
@@ -923,7 +983,7 @@ EOF;
             ];
         })->values()->toArray();
 
-        return ['journals' => $structured, 'map' => $map, 'products' => $products, 'token_map' => $tokenMap];
+        return ['journals' => $structured, 'map' => $map, 'products' => $products, 'token_map' => $tokenMap, 'client_products' => $clientProducts];
     }
 
     /**
