@@ -222,6 +222,25 @@ function SignupModal({ open, onClose, modalImage }) {
   );
 }
 
+function highlightSearchMatch(value, query) {
+  const text = String(value || '');
+  const needle = String(query || '').trim();
+  if (!needle) return text;
+  const lowerText = text.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  const pieces = [];
+  let cursor = 0;
+  let match = lowerText.indexOf(lowerNeedle, cursor);
+  while (match !== -1) {
+    if (match > cursor) pieces.push(text.slice(cursor, match));
+    pieces.push(<strong key={`${match}-${needle}`}>{text.slice(match, match + needle.length)}</strong>);
+    cursor = match + needle.length;
+    match = lowerText.indexOf(lowerNeedle, cursor);
+  }
+  if (cursor < text.length) pieces.push(text.slice(cursor));
+  return pieces.length ? pieces : text;
+}
+
 function SearchModal({ open, onClose, categories }) {
   const [q, setQ] = useState("");
   const [hl, setHl] = useState(0);
@@ -330,13 +349,13 @@ function SearchModal({ open, onClose, categories }) {
             </div>
           ) : query.length < 2 ? (
             <div className="search-empty"><p>Keep typing to search products and brands.</p></div>
-          ) : isSearching ? (
-            <div className="search-empty"><p>Finding curated products…</p></div>
-          ) : (results.length === 0 && catMatches.length === 0) ? (
+          ) : (!isSearching && results.length === 0 && catMatches.length === 0) ? (
             <div className="search-empty">
               <I.search width="38" height="38" />
               <p>No matches for <span className="q">"{q}"</span>.<br />Try a product, brand or category name.</p>
             </div>
+          ) : (isSearching && results.length === 0 && catMatches.length === 0) ? (
+            <div className="search-empty"><p>Finding curated products…</p></div>
           ) : (
             <>
               {catMatches.length > 0 && (
@@ -356,7 +375,7 @@ function SearchModal({ open, onClose, categories }) {
                       onMouseEnter={() => setHl(i)}>
                       <span className="thumb">{p.image ? <img className="p-img" src={p.image} alt="" /> : null}</span>
                       <span className="meta">
-                        <span className="n">{p.name}</span>
+                        <span className="n">{highlightSearchMatch(p.name, q)}</span>
                         <span className="c">{p.category} · {p.subcategory}</span>
                       </span>
                     </Link>

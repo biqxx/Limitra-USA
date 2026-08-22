@@ -1111,6 +1111,7 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .search-res .meta { flex: 1; min-width: 0; }
 .search-res .meta .b { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
 .search-res .meta .n { font-size: 14.5px; color: var(--ink); margin: 1px 0 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-res .meta .n strong { font-weight: 750; color: var(--brand); }
 .search-res .meta .c { font-size: 12px; color: var(--muted); }
 .search-res .pr { font-family: var(--font-display,"Bodoni Moda"),serif; font-size: 16px; color: var(--brand); flex: none; }
 
