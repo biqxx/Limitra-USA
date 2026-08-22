@@ -6,24 +6,42 @@
 
     $ogSiteName = config('app.name', 'Limitra USA');
     $ogTitle = $ogSiteName;
-    $ogDesc = 'Discover editor-vetted fashion, beauty, home & lifestyle picks. Curated finds from trusted retailers, updated weekly.';
+    $ogDesc = 'Independently curated fashion, beauty, home and lifestyle picks from third-party retailers. Limitra may earn a commission from eligible purchases.';
     $ogImage = 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1200&q=80';
     $ogType = 'website';
     $ogUrl = url()->current();
+    $productSchema = null;
 
     if ($productMeta) {
         $pName = $productMeta['name'] ?? '';
         $pBrand = $productMeta['brand'] ?? '';
         $ogTitle = $pBrand ? "{$pName} by {$pBrand} — {$ogSiteName}" : "{$pName} — {$ogSiteName}";
         $pDesc = $productMeta['description'] ?? '';
-        if (!empty($pDesc)) {
-            $ogDesc = \Illuminate\Support\Str::limit(strip_tags($pDesc), 160);
-        }
+        $retailer = trim((string) ($productMeta['retailer'] ?? ''));
+        $affiliateUrl = trim((string) ($productMeta['affiliate_url'] ?? ''));
+        $baseDesc = \Illuminate\Support\Str::limit(!empty($pDesc) ? strip_tags($pDesc) : 'A Limitra USA independently curated product listing.', 105);
+        $retailerContext = $retailer ? " Available from {$retailer}." : '';
+        $affiliateContext = $affiliateUrl ? ' This page contains an affiliate link; Limitra may earn a commission at no extra cost to you.' : '';
+        $ogDesc = $baseDesc . $retailerContext . $affiliateContext;
         if (!empty($productMeta['image'])) {
             $rawImg = $productMeta['image'];
             $ogImage = \Illuminate\Support\Str::startsWith($rawImg, ['http://', 'https://']) ? $rawImg : url($rawImg);
         }
         $ogType = 'product';
+        $productSchema = array_filter([
+            '@context' => 'https://schema.org',
+            '@type' => 'Product',
+            'name' => $pName,
+            'brand' => $pBrand ? ['@type' => 'Brand', 'name' => $pBrand] : null,
+            'description' => $ogDesc,
+            'image' => $ogImage,
+            'url' => $ogUrl,
+            'offers' => $affiliateUrl ? array_filter([
+                '@type' => 'Offer',
+                'url' => $affiliateUrl,
+                'seller' => $retailer ? ['@type' => 'Organization', 'name' => $retailer] : null,
+            ]) : null,
+        ]);
     } elseif ($articleMeta) {
         $ogTitle = ($articleMeta['title'] ?? '') . " — {$ogSiteName}";
         $aDesc = $articleMeta['excerpt'] ?? ($articleMeta['body'] ?? '');
@@ -67,16 +85,27 @@
 
     {{-- Primary & Open Graph / Twitter Meta Tags for Social Previews --}}
     <meta name="description" content="{{ $ogDesc }}">
+    <meta name="robots" content="max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+    <link rel="canonical" href="{{ $ogUrl }}">
     <meta property="og:site_name" content="{{ $ogSiteName }}">
     <meta property="og:title" content="{{ $ogTitle }}">
     <meta property="og:description" content="{{ $ogDesc }}">
     <meta property="og:image" content="{{ $ogImage }}">
     <meta property="og:url" content="{{ $ogUrl }}">
     <meta property="og:type" content="{{ $ogType }}">
+    @if ($productMeta && !empty($productMeta['retailer']))
+    <meta property="product:retailer" content="{{ $productMeta['retailer'] }}">
+    @endif
+    @if ($productMeta && !empty($productMeta['affiliate_url']))
+    <meta property="product:affiliate_link" content="{{ $productMeta['affiliate_url'] }}">
+    @endif
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ $ogTitle }}">
     <meta name="twitter:description" content="{{ $ogDesc }}">
     <meta name="twitter:image" content="{{ $ogImage }}">
+    @if ($productSchema)
+    <script type="application/ld+json">@json($productSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)</script>
+    @endif
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -27,7 +27,7 @@ export default function Home() {
     <Layout savedCount={saved.size} onOpenSaved={() => setDrawerOpen(true)}>
       <Seo
         title="Curated Product Discovery"
-        description={settings?.hero_subtitle || 'Discover editor-vetted fashion, beauty, home & lifestyle picks from trusted retailers, updated weekly.'}
+        description="Independently curated fashion, beauty, home and lifestyle picks from third-party retailers. Limitra may earn a commission from eligible purchases."
         image={(featuredProducts || [])[0]?.image}
       />
       <div

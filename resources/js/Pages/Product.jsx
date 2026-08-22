@@ -104,6 +104,8 @@ export default function Product() {
         description={product?.description}
         image={product?.image}
         type="product"
+        retailer={product?.retailer}
+        affiliateUrl={product?.affiliate_url}
       />
       <div className="announce">Exclusive access to curated luxury · <strong>Editor-vetted picks, updated weekly</strong></div>
 
@@ -148,7 +150,11 @@ export default function Product() {
                   {copied && <span className="copy-toast" style={{ left: "50%", transform: "translateX(-50%)" }}>Copied!</span>}
                 </button>
               </div>
-              <div className="pd-retailer-note"><I.lock /> Affiliate link · Limitra may earn a commission. Price shown is indicative.</div>
+              <div className="pd-retailer-note">
+                <I.lock />
+                {product.retailer ? <> Independently curated by Limitra · Available from <strong>{product.retailer}</strong>. <a href={`/go/${product.id}`} target="_blank" rel="noopener noreferrer sponsored">View this product at {product.retailer}</a>. </> : ' Independently curated by Limitra. '}
+                This is an affiliate link; Limitra may earn a commission at no extra cost to you. Purchases are completed securely with the retailer.
+              </div>
             </div>
 
             <div className="pd-trust">
