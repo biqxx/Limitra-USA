@@ -9,6 +9,12 @@ class ProductDetail extends Model
     protected $fillable = ['product_id','about','highlights','specs'];
     protected $casts = ['about' => 'array', 'highlights' => 'array', 'specs' => 'array'];
 
+    protected static function booted(): void
+    {
+        static::saved(fn () => Product::invalidatePublicCatalogCache());
+        static::deleted(fn () => Product::invalidatePublicCatalogCache());
+    }
+
     public function product()
     {
         return $this->belongsTo(Product::class, 'product_id');

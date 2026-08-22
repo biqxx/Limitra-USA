@@ -622,6 +622,12 @@ EOF;
         $name  = mb_strtolower($p->name ?? '');
         $desc  = mb_strtolower($p->description ?? '');
         $brand = mb_strtolower($p->brand ?? '');
+        $details = mb_strtolower(json_encode([
+            $p->features ?? [],
+            $p->detail?->about ?? [],
+            $p->detail?->highlights ?? [],
+            $p->detail?->specs ?? [],
+        ], JSON_UNESCAPED_UNICODE) ?: '');
 
         foreach ($terms as $term) {
             $t = mb_strtolower(trim($term));
@@ -637,6 +643,9 @@ EOF;
 
             if (str_contains($desc, $t)) {
                 $score += 5;
+            }
+            if (str_contains($details, $t)) {
+                $score += 15;
             }
         }
 
@@ -659,8 +668,7 @@ EOF;
         $query->where(function ($q) use ($terms) {
             foreach ($terms as $term) {
                 $q->orWhere(function ($qq) use ($term) {
-                    $qq->where('name', 'like', "%{$term}%")
-                       ->orWhere('description', 'like', "%{$term}%");
+                    $this->applyFullProductTextMatch($qq, $term);
                 });
             }
         });
@@ -672,8 +680,7 @@ EOF;
         $query->where(function ($q) use ($terms) {
             foreach ($terms as $term) {
                 $q->orWhere(function ($qq) use ($term) {
-                    $qq->where('name', 'like', "%{$term}%")
-                       ->orWhere('description', 'like', "%{$term}%");
+                    $this->applyFullProductTextMatch($qq, $term);
                 });
             }
         });
@@ -684,7 +691,7 @@ EOF;
     {
         $query->where(function ($q) use ($terms) {
             foreach ($terms as $term) {
-                $q->orWhere('description', 'like', "%{$term}%");
+                $this->applyFullProductTextMatch($q, $term);
             }
         });
     }
@@ -697,6 +704,21 @@ EOF;
                 $q->orWhere('brand', 'like', "%{$term}%");
             }
         });
+    }
+
+    /** Match every customer-facing product field, including JSON-backed editorial details. */
+    private function applyFullProductTextMatch(Builder $query, string $term): void
+    {
+        $like = "%{$term}%";
+        $query->where('name', 'like', $like)
+            ->orWhere('brand', 'like', $like)
+            ->orWhere('description', 'like', $like)
+            ->orWhere('retailer', 'like', $like)
+            ->orWhere('features', 'like', $like)
+            ->orWhereHas('detail', fn ($detail) => $detail
+                ->where('about', 'like', $like)
+                ->orWhere('highlights', 'like', $like)
+                ->orWhere('specs', 'like', $like));
     }
 
     /**
@@ -722,7 +744,7 @@ EOF;
     /** @return array{products: array, map: array<string,string>} */
     private function searchProducts(array $search): array
     {
-        $query = Product::with(['category', 'subcategory']);
+        $query = Product::with(['category', 'subcategory', 'detail']);
 
         // Text searches name OR description; if text is set, individual name/description are skipped
         $textTerms = $this->normalizeTerms($search['text'] ?? null);
@@ -819,6 +841,9 @@ EOF;
                 'category'    => implode(' › ', array_filter([$p->category?->name, $p->subcategory?->name])),
                 'price'       => $p->price,
                 'description' => $p->description,
+                'about'       => $p->detail?->about ?? [],
+                'highlights'  => $p->detail?->highlights ?? $p->features ?? [],
+                'specifications' => $p->detail?->specs ?? [],
             ];
         })->values()->toArray();
 
@@ -938,7 +963,7 @@ EOF;
             $productTokens = [];
 
             if (! empty($productIds)) {
-                foreach (Product::whereIn('id', $productIds)->get() as $p) {
+                foreach (Product::with(['category', 'subcategory', 'detail'])->whereIn('id', $productIds)->get() as $p) {
                     $pid = (string) $p->id;
 
                     $clientProducts[$pid] = [
@@ -968,6 +993,9 @@ EOF;
                         'category'    => implode(' › ', array_filter([$p->category?->name, $p->subcategory?->name])),
                         'price'       => $p->price,
                         'description' => $p->description,
+                        'about'       => $p->detail?->about ?? [],
+                        'highlights'  => $p->detail?->highlights ?? $p->features ?? [],
+                        'specifications' => $p->detail?->specs ?? [],
                     ];
                     $productTokens[] = $pToken;
                 }

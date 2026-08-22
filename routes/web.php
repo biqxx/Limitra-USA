@@ -13,6 +13,7 @@ use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\GuidesController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductSearchController;
 use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\RedirectController;
 use App\Http\Controllers\SitemapController;
@@ -46,6 +47,7 @@ Route::get('/page/{page}', [StaticPageController::class, 'show'])->name('page.sh
 Route::post('/api/chat', [ChatController::class, 'message'])->name('chat.message')->middleware('throttle:30,1');
 Route::get('/api/chat/starters', [ChatController::class, 'starters'])->name('chat.starters')->middleware('throttle:60,1');
 Route::get('/api/chat/products', [ChatController::class, 'productsByIds'])->name('chat.products')->middleware('throttle:60,1');
+Route::get('/api/search/products', [ProductSearchController::class, 'index'])->name('products.search')->middleware('throttle:90,1');
 Route::post('/newsletter/subscribe', [NewsletterController::class, 'store'])->name('newsletter.subscribe');
 Route::get('/go/{id}', [RedirectController::class, 'go'])->name('go')->middleware('throttle:120,1');
 Route::post('/videos/{id}/track-view', [VideoViewController::class, 'store'])->name('videos.track-view')->middleware('throttle:60,1');

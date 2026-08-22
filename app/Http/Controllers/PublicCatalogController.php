@@ -23,7 +23,7 @@ class PublicCatalogController extends Controller
 
         $payload = Cache::remember($cacheKey, now()->addDay(), function () use ($page) {
             $products = Product::query()
-                ->with(['category:id,name,slug', 'subcategory:id,name'])
+                ->with(['category:id,name,slug', 'subcategory:id,name', 'detail'])
                 ->select([
                     'id', 'slug', 'name', 'brand', 'price', 'category_id', 'subcategory_id',
                     'retailer', 'affiliate_url', 'image', 'description', 'badge', 'rating',
@@ -47,6 +47,9 @@ class PublicCatalogController extends Controller
                     'price' => $frontEnd['price'],
                     'category' => $frontEnd['category'],
                     'subcategory' => $frontEnd['subcategory'],
+                    'about' => $product->detail?->about ?? [],
+                    'highlights' => $product->detail?->highlights ?? $frontEnd['features'],
+                    'specifications' => $product->detail?->specs ?? [],
                     'retailer' => $frontEnd['retailer'],
                     // This is the publicly intended affiliate destination, never a private API URL.
                     'retailer_product_url' => $frontEnd['affiliate_url'],

@@ -222,9 +222,11 @@ function SignupModal({ open, onClose, modalImage }) {
   );
 }
 
-function SearchModal({ open, onClose, catalog, categories }) {
+function SearchModal({ open, onClose, categories }) {
   const [q, setQ] = useState("");
   const [hl, setHl] = useState(0);
+  const [results, setResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -238,20 +240,30 @@ function SearchModal({ open, onClose, catalog, categories }) {
   }, [open]);
 
   const query = q.trim().toLowerCase();
-  const results = useMemo(() => {
-    if (!query) return [];
-    const cat = catalog || [];
-    const scored = cat.map((p) => {
-      const hay = `${p.name} ${p.brand} ${p.category} ${p.subcategory}`.toLowerCase();
-      let score = -1;
-      if (p.name.toLowerCase().startsWith(query)) score = 0;
-      else if (p.name.toLowerCase().includes(query)) score = 1;
-      else if (p.brand.toLowerCase().includes(query)) score = 2;
-      else if (hay.includes(query)) score = 3;
-      return { p, score };
-    }).filter((x) => x.score >= 0).sort((a, b) => a.score - b.score);
-    return scored.map((x) => x.p);
-  }, [query, catalog]);
+
+  useEffect(() => {
+    if (!open || query.length < 2) {
+      setResults([]);
+      setIsSearching(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/search/products?q=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const data = response.ok ? await response.json() : { products: [] };
+        setResults(data.products || []);
+      } catch (error) {
+        if (error.name !== 'AbortError') setResults([]);
+      } finally {
+        if (!controller.signal.aborted) setIsSearching(false);
+      }
+    }, 220);
+
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [open, query]);
 
   const catMatches = useMemo(() => {
     if (!query) return [];
@@ -316,6 +328,10 @@ function SearchModal({ open, onClose, catalog, categories }) {
                 {popular.map((p) => <Link key={p.label} href={p.href} onClick={onClose}>{p.label}</Link>)}
               </div>
             </div>
+          ) : query.length < 2 ? (
+            <div className="search-empty"><p>Keep typing to search products and brands.</p></div>
+          ) : isSearching ? (
+            <div className="search-empty"><p>Finding curated products…</p></div>
           ) : (results.length === 0 && catMatches.length === 0) ? (
             <div className="search-empty">
               <I.search width="38" height="38" />
@@ -380,7 +396,6 @@ function BrandMark({ footer }) {
 export function Header({ savedCount, onOpenSaved }) {
   const { props } = usePage();
   const cats = props.categories || [];
-  const catalog = props.catalog || [];
   const ls = props.layoutSettings || {};
   const user = props.auth?.user || null;
   const popupDelayMs   = Number(ls.newsletter_popup_delay_ms   ?? 3000);
@@ -579,7 +594,7 @@ export function Header({ savedCount, onOpenSaved }) {
         </div>
       )}
 
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} catalog={catalog} categories={cats} />
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} categories={cats} />
       <SignupModal open={signupOpen} onClose={() => setSignupOpen(false)} modalImage={modalImage} />
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </header>

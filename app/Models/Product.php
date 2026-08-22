@@ -25,12 +25,12 @@ class Product extends Model
     {
         static::saved(function () {
             \Illuminate\Support\Facades\Cache::forget('inertia_shared_catalog');
-            static::bumpPublicCatalogVersion();
+            static::invalidatePublicCatalogCache();
         });
 
         static::deleted(function () {
             \Illuminate\Support\Facades\Cache::forget('inertia_shared_catalog');
-            static::bumpPublicCatalogVersion();
+            static::invalidatePublicCatalogCache();
         });
     }
 
@@ -38,7 +38,7 @@ class Product extends Model
      * Public catalogue responses are keyed by this version. Bumping it means product
      * edits take effect immediately without needing to iterate through every cached page.
      */
-    private static function bumpPublicCatalogVersion(): void
+    public static function invalidatePublicCatalogCache(): void
     {
         $key = 'public_catalog_version';
         $current = (int) \Illuminate\Support\Facades\Cache::get($key, 1);
