@@ -6,8 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductDetail extends Model
 {
-    protected $fillable = ['product_id','about','highlights','specs'];
-    protected $casts = ['about' => 'array', 'highlights' => 'array', 'specs' => 'array'];
+    protected $fillable = ['product_id','about','highlights','specs','available_options'];
+    protected $casts = ['about' => 'array', 'highlights' => 'array', 'specs' => 'array', 'available_options' => 'array'];
 
     protected static function booted(): void
     {

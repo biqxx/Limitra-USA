@@ -103,8 +103,14 @@ class BulkImportService
                     $about = $this->cleanArray($data['about'] ?? []);
                     $highlights = $this->cleanArray($data['highlights'] ?? []);
                     $specs = $this->cleanSpecs($data['specs'] ?? []);
-                    if ($about || $highlights || $specs) {
-                        ProductDetail::updateOrCreate(['product_id' => $id], compact('about', 'highlights', 'specs'));
+                    $availableOptions = $this->cleanAvailableOptions($data['availableOptions'] ?? []);
+                    if ($about || $highlights || $specs || $availableOptions) {
+                        ProductDetail::updateOrCreate(['product_id' => $id], [
+                            'about' => $about,
+                            'highlights' => $highlights,
+                            'specs' => $specs,
+                            'available_options' => $availableOptions,
+                        ]);
                     }
                 } catch (\Throwable $e) {
                     $errors[] = ['row' => $i, 'summary' => $summary, 'message' => $e->getMessage()];
@@ -433,5 +439,17 @@ class BulkImportService
     private function cleanSpecs(array $specs): array
     {
         return array_values(array_filter($specs, fn ($r) => ($r[0] ?? '') || ($r[1] ?? '')));
+    }
+
+    private function cleanAvailableOptions(array $options): array
+    {
+        $clean = [];
+        foreach ($options as $label => $values) {
+            $key = Str::snake(trim((string) $label));
+            if ($key === '' || !is_array($values)) continue;
+            $items = array_slice($this->cleanArray($values), 0, 100);
+            if ($items) $clean[$key] = $items;
+        }
+        return $clean;
     }
 }

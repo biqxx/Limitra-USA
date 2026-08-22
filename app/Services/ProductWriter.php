@@ -25,6 +25,20 @@ class ProductWriter
         return array_values(array_filter($specs, fn ($r) => ($r[0] ?? '') || ($r[1] ?? '')));
     }
 
+    /** Normalize selectable retailer variants, e.g. { colors: ['Blue'], sizes: ['M'] }. */
+    public function cleanAvailableOptions(array $options): array
+    {
+        $clean = [];
+        foreach ($options as $label => $values) {
+            $key = Str::snake(trim((string) $label));
+            if ($key === '' || !is_array($values)) continue;
+
+            $items = array_slice($this->cleanArray($values), 0, 100);
+            if ($items) $clean[$key] = $items;
+        }
+        return $clean;
+    }
+
     public function uniqueProductSlug(?string $source): string
     {
         $base = Str::slug($source ?: '') ?: Str::slug(Str::random(8));
@@ -79,13 +93,15 @@ class ProductWriter
         $about = $this->cleanArray($data['about'] ?? []);
         $highlights = $this->cleanArray($data['highlights'] ?? []);
         $specs = $this->cleanSpecs($data['specs'] ?? []);
+        $availableOptions = $this->cleanAvailableOptions($data['availableOptions'] ?? []);
 
-        if ($about || $highlights || $specs) {
+        if ($about || $highlights || $specs || $availableOptions) {
             ProductDetail::create([
                 'product_id' => $id,
                 'about' => $about,
                 'highlights' => $highlights,
                 'specs' => $specs,
+                'available_options' => $availableOptions,
             ]);
         }
 

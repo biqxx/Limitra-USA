@@ -128,6 +128,9 @@ class ExtensionController extends Controller
             'items.*.highlights.*'    => 'nullable|string',
             'items.*.specs'           => 'nullable|array',
             'items.*.specs.*'         => 'array',
+            'items.*.availableOptions' => 'nullable|array',
+            'items.*.availableOptions.*' => 'nullable|array',
+            'items.*.availableOptions.*.*' => 'nullable|string|max:255',
             'items.*.categoryName'    => 'nullable|string',
             'items.*.subcategoryName' => 'nullable|string',
         ]);
@@ -154,6 +157,7 @@ class ExtensionController extends Controller
                         'about'       => $item['about'] ?? [],
                         'highlights'  => $item['highlights'] ?? [],
                         'specs'       => $item['specs'] ?? [],
+                        'availableOptions' => $item['availableOptions'] ?? [],
                     ]);
 
                     RetailerProductImport::create([

@@ -36,7 +36,8 @@ class ProductSearchController extends Controller
                     ->orWhereHas('detail', fn ($detail) => $detail
                         ->where('about', 'like', $contains)
                         ->orWhere('highlights', 'like', $contains)
-                        ->orWhere('specs', 'like', $contains));
+                        ->orWhere('specs', 'like', $contains)
+                        ->orWhere('available_options', 'like', $contains));
             })
             ->orderByRaw(
                 'CASE WHEN name LIKE ? THEN 0 WHEN brand LIKE ? THEN 1 WHEN name LIKE ? THEN 2 WHEN brand LIKE ? THEN 3 ELSE 4 END',

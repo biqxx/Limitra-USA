@@ -627,6 +627,7 @@ EOF;
             $p->detail?->about ?? [],
             $p->detail?->highlights ?? [],
             $p->detail?->specs ?? [],
+            $p->detail?->available_options ?? [],
         ], JSON_UNESCAPED_UNICODE) ?: '');
 
         foreach ($terms as $term) {
@@ -718,7 +719,8 @@ EOF;
             ->orWhereHas('detail', fn ($detail) => $detail
                 ->where('about', 'like', $like)
                 ->orWhere('highlights', 'like', $like)
-                ->orWhere('specs', 'like', $like));
+                ->orWhere('specs', 'like', $like)
+                ->orWhere('available_options', 'like', $like));
     }
 
     /**
@@ -844,6 +846,7 @@ EOF;
                 'about'       => $p->detail?->about ?? [],
                 'highlights'  => $p->detail?->highlights ?? $p->features ?? [],
                 'specifications' => $p->detail?->specs ?? [],
+                'available_options' => $p->detail?->available_options ?? [],
             ];
         })->values()->toArray();
 
@@ -996,6 +999,7 @@ EOF;
                         'about'       => $p->detail?->about ?? [],
                         'highlights'  => $p->detail?->highlights ?? $p->features ?? [],
                         'specifications' => $p->detail?->specs ?? [],
+                        'available_options' => $p->detail?->available_options ?? [],
                     ];
                     $productTokens[] = $pToken;
                 }

@@ -44,6 +44,32 @@ function SpecsEditor({ items, onChange }) {
   );
 }
 
+function AvailableOptionsEditor({ options, onChange }) {
+  const rows = Object.entries(options || {});
+  const set = (oldKey, key, value) => {
+    const next = { ...options };
+    delete next[oldKey];
+    const label = key.trim().toLowerCase().replace(/\s+/g, '_');
+    if (label) next[label] = value.split(',').map((item) => item.trim()).filter(Boolean);
+    onChange(next);
+  };
+  const add = () => onChange({ ...options, [`option_${rows.length + 1}`]: [] });
+  const del = (key) => { const next = { ...options }; delete next[key]; onChange(next); };
+
+  return (
+    <div className="adm-rep">
+      {rows.map(([key, values]) => (
+        <div className="adm-rep-row" key={key}>
+          <input className="adm-input" style={{ flex: '.5' }} value={key.replace(/_/g, ' ')} placeholder="e.g. Colors" onChange={(e) => set(key, e.target.value, (values || []).join(', '))} />
+          <input className="adm-input" value={(values || []).join(', ')} placeholder="e.g. Midnight Blue, Silver" onChange={(e) => set(key, key, e.target.value)} />
+          <button type="button" className="del" onClick={() => del(key)} aria-label="Remove"><I.close /></button>
+        </div>
+      ))}
+      <button type="button" className="adm-add-row" onClick={add}><I.plus width="14" height="14" /> Add available option</button>
+    </div>
+  );
+}
+
 function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
   const start = initial || {};
   const firstCat = categories[0] || { name: '', subs: [] };
@@ -64,6 +90,7 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
     about: (start.detail && start.detail.about && start.detail.about.length) ? start.detail.about : [''],
     highlights: (start.detail && start.detail.highlights && start.detail.highlights.length) ? start.detail.highlights : (start.features && start.features.length ? start.features : ['']),
     specs: (start.detail && start.detail.specs && start.detail.specs.length) ? start.detail.specs : [['', '']],
+    availableOptions: start.detail?.available_options || {},
     is_featured: start.is_featured || false,
     is_resort: start.is_resort || false,
     is_new: start.is_new || false,
@@ -99,6 +126,7 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
       highlights: clean(f.highlights),
       about: clean(f.about),
       specs: f.specs.filter((r) => (r[0] || '').trim() || (r[1] || '').trim()),
+      availableOptions: f.availableOptions,
       is_featured: f.is_featured,
       is_resort: f.is_resort,
       is_new: f.is_new,
@@ -198,6 +226,10 @@ function ProductEditor({ initial, categories, onCancel, onSave, existingIds }) {
       <div className="adm-field">
         <label>Specifications</label>
         <SpecsEditor items={f.specs} onChange={(v) => set('specs', v)} />
+      </div>
+      <div className="adm-field">
+        <label>Available options <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>— internal and AI only; not shown on the product page</span></label>
+        <AvailableOptionsEditor options={f.availableOptions} onChange={(v) => set('availableOptions', v)} />
       </div>
 
       {!isEdit && (
@@ -342,7 +374,7 @@ export default function ProductsView({ products, categories, productsLookup, onT
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <BulkImportButton
             label="products"
-            headers={['name', 'brand', 'category', 'subcategory', 'price', 'retailer', 'affiliate_url', 'image', 'badge', 'rating', 'description', 'is_featured', 'is_resort', 'is_new', 'highlights', 'about', 'specs']}
+            headers={['name', 'brand', 'category', 'subcategory', 'price', 'retailer', 'affiliate_url', 'image', 'badge', 'rating', 'description', 'is_featured', 'is_resort', 'is_new', 'highlights', 'about', 'specs', 'available_options']}
             sample={{
               name: 'Quilted Leather Crossbody', brand: 'Maison Vale',
               category: categories[0]?.name || 'Bags', subcategory: categories[0]?.subs?.[0] || '', price: '280',
@@ -352,6 +384,7 @@ export default function ProductsView({ products, categories, productsLookup, onT
               is_featured: 'TRUE', is_resort: 'FALSE', is_new: 'TRUE',
               highlights: 'Full-grain leather|Adjustable strap', about: 'Handcrafted in Italy.|Lined interior with zip pocket.',
               specs: 'Material:Leather;Origin:Italy',
+              available_options: 'colors:Black|Tan;sizes:Small|Medium',
             }}
             existing={productsLookup}
             parseRow={(raw) => ({
@@ -361,6 +394,10 @@ export default function ProductsView({ products, categories, productsLookup, onT
               is_featured: toBool(raw.is_featured), is_resort: toBool(raw.is_resort), is_new: toBool(raw.is_new),
               highlights: splitList(raw.highlights), about: splitList(raw.about),
               specs: String(raw.specs || '').split(';').map((s) => s.trim()).filter(Boolean).map((pair) => pair.split(':').map((x) => x.trim())),
+              availableOptions: Object.fromEntries(String(raw.available_options || '').split(';').map((part) => part.trim()).filter(Boolean).map((part) => {
+                const [key, values = ''] = part.split(':');
+                return [key.trim(), splitList(values)];
+              }).filter(([key]) => key)),
             })}
             matchExisting={(raw, data, existing) => (data.name ? existing.find((p) => (p.name || '').trim().toLowerCase() === data.name.trim().toLowerCase()) : null)}
             getId={(p) => p.id}

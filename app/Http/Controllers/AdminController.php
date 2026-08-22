@@ -156,7 +156,8 @@ class AdminController extends Controller
                 'about' => $p->detail->about ?? [],
                 'highlights' => $p->detail->highlights ?? [],
                 'specs' => $p->detail->specs ?? [],
-            ] : ['about' => [], 'highlights' => [], 'specs' => []],
+                'available_options' => $p->detail->available_options ?? [],
+            ] : ['about' => [], 'highlights' => [], 'specs' => [], 'available_options' => []],
         ]);
 
         return $page;
@@ -187,7 +188,7 @@ class AdminController extends Controller
         $headers = [
             'id', 'slug', 'name', 'brand', 'category', 'subcategory', 'price', 'retailer',
             'affiliate_url', 'image', 'badge', 'rating', 'description',
-            'is_featured', 'is_resort', 'is_new', 'highlights', 'about', 'specs',
+            'is_featured', 'is_resort', 'is_new', 'highlights', 'about', 'specs', 'available_options',
         ];
 
         return response()->streamDownload(function () use ($headers) {
@@ -218,6 +219,7 @@ class AdminController extends Controller
                             implode('|', $p->features ?? []),
                             implode('|', $p->detail?->about ?? []),
                             collect($p->detail?->specs ?? [])->map(fn ($s) => "{$s[0]}:{$s[1]}")->implode(';'),
+                            collect($p->detail?->available_options ?? [])->map(fn ($values, $key) => $key . ':' . implode('|', $values))->implode(';'),
                         ]);
                     }
                 });
@@ -448,6 +450,7 @@ class AdminController extends Controller
         $about = $this->productWriter->cleanArray($request->about ?? []);
         $highlights = $this->productWriter->cleanArray($request->highlights ?? []);
         $specs = $this->productWriter->cleanSpecs($request->specs ?? []);
+        $availableOptions = $this->productWriter->cleanAvailableOptions($request->availableOptions ?? []);
 
         ProductDetail::updateOrCreate(
             ['product_id' => $id],
@@ -455,6 +458,7 @@ class AdminController extends Controller
                 'about' => $about,
                 'highlights' => $highlights,
                 'specs' => $specs,
+                'available_options' => $availableOptions,
             ]
         );
 

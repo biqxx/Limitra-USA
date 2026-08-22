@@ -50,6 +50,7 @@ class PublicCatalogController extends Controller
                     'about' => $product->detail?->about ?? [],
                     'highlights' => $product->detail?->highlights ?? $frontEnd['features'],
                     'specifications' => $product->detail?->specs ?? [],
+                    'available_options' => $product->detail?->available_options ?? [],
                     'retailer' => $frontEnd['retailer'],
                     // This is the publicly intended affiliate destination, never a private API URL.
                     'retailer_product_url' => $frontEnd['affiliate_url'],
