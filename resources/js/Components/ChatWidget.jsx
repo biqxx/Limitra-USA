@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePage, Link } from '@inertiajs/react';
 import I from './Icons';
+import useSaved from '../hooks/useSaved';
 
 const CHAT_STORAGE = "limitra.chat.history.v1";
 const LAST_ACTIVITY_STORAGE = "limitra.chat.lastActivity.v1";
@@ -83,22 +84,23 @@ function renderTextBlock(text, keyPrefix, listCounter) {
   return nodes;
 }
 
-function ChatProdCard({ p }) {
+function ChatProdCard({ p, saved, onToggle }) {
   return (
-    <a href={`/product/${p.slug || p.id}`} className="chat-prod-card" target="_blank" rel="noopener">
-      <div className="cpc-img">
-        {p.image ? (
-          <img src={p.image} alt={p.name} loading="lazy" />
-        ) : (
-          <div style={{ width: "100%", height: "100%", background: "var(--card)" }} />
-        )}
-      </div>
+    <div className="chat-prod-card">
+      <a href={`/product/${p.slug || p.id}`} className="cpc-img" target="_blank" rel="noopener">
+        {p.image ? <img src={p.image} alt={p.name} loading="lazy" /> : <div style={{ width: "100%", height: "100%", background: "var(--card)" }} />}
+      </a>
       <div className="cpc-body">
         <span className="cpc-cat">{p.subcategory || p.category || p.brand}</span>
         <span className="cpc-name">{p.name}</span>
-        <span className="cpc-cta">Buy Now →</span>
+        <div className="cpc-actions">
+          <a href={`/product/${p.slug || p.id}`} className="cpc-cta" target="_blank" rel="noopener">View product →</a>
+          <button type="button" className={`cpc-save${saved ? ' is-saved' : ''}`} onClick={() => onToggle(p.id)} aria-label={saved ? 'Remove from wishlist' : 'Add to wishlist'} title={saved ? 'Remove from wishlist' : 'Add to wishlist'}>
+            <I.heart width="15" height="15" fill={saved ? 'currentColor' : 'none'} /> {saved ? 'Saved' : 'Save'}
+          </button>
+        </div>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -113,7 +115,7 @@ function TypingDots() {
   );
 }
 
-function ChatMessage({ msg, catalog, productsMap, isLast, onSuggestion }) {
+function ChatMessage({ msg, catalog, productsMap, isLast, onSuggestion, saved, onToggle }) {
   if (msg.role === "user") {
     return (
       <div className="chat-msg user">
@@ -146,7 +148,7 @@ function ChatMessage({ msg, catalog, productsMap, isLast, onSuggestion }) {
             const product = productsMap?.[part] || catalog?.find((p) => p.id === part);
             return product ? (
               <div key={`p${i}`} className="chat-prod-inline">
-                <ChatProdCard p={product} />
+                <ChatProdCard p={product} saved={saved?.has(product.id)} onToggle={onToggle} />
               </div>
             ) : null;
           })}
@@ -185,6 +187,7 @@ const CHAT_PRODUCTS_STORAGE = "limitra.chat.products.v1";
 function ChatPanel({ onClose, catalog, onMouseDown }) {
   const { props } = usePage();
   const user = props.auth?.user || null;
+  const { saved, toggle } = useSaved();
   const mergedRef = useRef(false);
 
   const [history, setHistory] = useState(() => {
@@ -427,7 +430,7 @@ function ChatPanel({ onClose, catalog, onMouseDown }) {
           </div>
         ) : (
           messages.filter(m => m.content).map((msg, i, arr) => (
-            <ChatMessage key={i} msg={msg} catalog={catalog} productsMap={productsMap} isLast={i === arr.length - 1} onSuggestion={send} />
+            <ChatMessage key={i} msg={msg} catalog={catalog} productsMap={productsMap} isLast={i === arr.length - 1} onSuggestion={send} saved={saved} onToggle={toggle} />
           ))
         )}
         {loading && history.length > 0 && history[history.length - 1]?.content === '' && <TypingDots />}

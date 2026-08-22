@@ -1875,7 +1875,10 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 .cpc-body { flex: 1; padding: 8px 10px 8px 0; }
 .cpc-cat { display: block; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 2px; }
 .cpc-name { display: block; font-size: 12.5px; color: var(--ink); font-weight: 500; line-height: 1.3; margin-bottom: 4px; }
+.cpc-actions { display: flex; align-items: center; gap: 10px; }
 .cpc-cta { display: block; font-size: 11px; font-weight: 700; color: var(--brand); letter-spacing: .05em; }
+.cpc-save { display: inline-flex; align-items: center; gap: 4px; border: 0; padding: 0; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.cpc-save:hover, .cpc-save.is-saved { color: var(--accent); }
 
 /* inline journal (article) recommendation link — underlined text within the reply itself,
    not a separate card like a product gets */
