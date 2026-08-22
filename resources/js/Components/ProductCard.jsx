@@ -3,6 +3,7 @@ import { Link } from '@inertiajs/react';
 import I from './Icons';
 import { copyToClipboard } from '../lib/clipboard';
 import { formatPrice } from '../lib/price';
+import useSaved from '../hooks/useSaved';
 
 // Deal CTA label, shown regardless of retailer.
 export function shopCta() {
@@ -284,6 +285,32 @@ export function QuickView({ product, saved, onToggle, onClose, dealCta }) {
 }
 
 export function SavedDrawer({ open, products, onClose, onToggle, onQuick }) {
+  const { saved } = useSaved();
+  const [loadedProducts, setLoadedProducts] = useState([]);
+  const pageProducts = products || [];
+
+  // Page-level props often contain only featured/category products. Fetch any saved
+  // IDs outside that subset so the drawer always represents the complete wishlist.
+  useEffect(() => {
+    if (!open) return;
+    const known = new Set(pageProducts.map((product) => String(product.id)));
+    const missing = [...saved].map(String).filter((id) => !known.has(id));
+    if (!missing.length) {
+      setLoadedProducts([]);
+      return;
+    }
+
+    let cancelled = false;
+    fetch(`/api/chat/products?ids=${encodeURIComponent(missing.slice(0, 50).join(','))}`)
+      .then((response) => response.ok ? response.json() : { products: [] })
+      .then((data) => { if (!cancelled) setLoadedProducts(data.products || []); })
+      .catch(() => { if (!cancelled) setLoadedProducts([]); });
+    return () => { cancelled = true; };
+  }, [open, saved, pageProducts]);
+
+  const productsById = new Map([...pageProducts, ...loadedProducts].map((product) => [String(product.id), product]));
+  const visibleProducts = [...saved].map(String).map((id) => productsById.get(id)).filter(Boolean);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -296,17 +323,17 @@ export function SavedDrawer({ open, products, onClose, onToggle, onQuick }) {
       <div className="drawer-scrim" onClick={onClose}></div>
       <aside className="drawer" role="dialog" aria-label="Saved products">
         <div className="drawer-head">
-          <h3>Your Picks{products.length > 0 ? ` (${products.length})` : ""}</h3>
+          <h3>Your Picks{saved.size > 0 ? ` (${saved.size})` : ""}</h3>
           <button className="icon-btn" onClick={onClose} aria-label="Close"><I.close /></button>
         </div>
-        {products.length === 0 ? (
+        {visibleProducts.length === 0 ? (
           <div className="drawer-empty">
             <I.heart width="46" height="46" />
             <p>No saved items yet.<br />Tap the heart on any product to build your collection.</p>
           </div>
         ) : (
           <div className="drawer-list">
-            {products.map((p) => (
+            {visibleProducts.map((p) => (
               <div className="saved-row" key={p.id}>
                 {p.image && <img className="p-img" src={p.image} alt={p.name} />}
                 <div className="info" onClick={() => onQuick(p)} style={{ cursor: "pointer" }}>
@@ -319,7 +346,7 @@ export function SavedDrawer({ open, products, onClose, onToggle, onQuick }) {
             ))}
           </div>
         )}
-        {products.length > 0 && (
+        {saved.size > 0 && (
           <div className="drawer-foot">
             <a className="btn btn-primary btn-block" href="#">View all deals</a>
           </div>
