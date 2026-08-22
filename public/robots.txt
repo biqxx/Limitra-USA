@@ -6,3 +6,4 @@ Disallow: /login
 Disallow: /register
 
 Sitemap: https://limitrausa.com/sitemap.xml
+# Public, paginated product catalogue for compatible crawlers: https://limitrausa.com/catalog.json

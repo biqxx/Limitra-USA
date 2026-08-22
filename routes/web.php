@@ -13,6 +13,7 @@ use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\GuidesController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\RedirectController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\StaticPageController;
@@ -23,6 +24,12 @@ use Illuminate\Support\Facades\Route;
 
 // Sitemap
 Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('sitemap');
+Route::get('/sitemaps/core.xml', [SitemapController::class, 'core'])->name('sitemap.core');
+Route::get('/sitemaps/content.xml', [SitemapController::class, 'content'])->name('sitemap.content');
+Route::get('/sitemaps/products/{page}.xml', [SitemapController::class, 'products'])
+    ->whereNumber('page')
+    ->name('sitemap.products');
+Route::get('/catalog.json', [PublicCatalogController::class, 'index'])->name('catalog.public');
 
 // Storefront
 Route::get('/', [HomeController::class, 'index'])->name('home');

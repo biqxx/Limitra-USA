@@ -87,6 +87,7 @@
     <meta name="description" content="{{ $ogDesc }}">
     <meta name="robots" content="max-image-preview:large, max-snippet:-1, max-video-preview:-1">
     <link rel="canonical" href="{{ $ogUrl }}">
+    <link rel="alternate" type="application/json" title="Limitra USA public product catalogue" href="{{ url('/catalog.json') }}">
     <meta property="og:site_name" content="{{ $ogSiteName }}">
     <meta property="og:title" content="{{ $ogTitle }}">
     <meta property="og:description" content="{{ $ogDesc }}">
