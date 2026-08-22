@@ -346,11 +346,6 @@ export function SavedDrawer({ open, products, onClose, onToggle, onQuick }) {
             ))}
           </div>
         )}
-        {saved.size > 0 && (
-          <div className="drawer-foot">
-            <a className="btn btn-primary btn-block" href="#">View all deals</a>
-          </div>
-        )}
       </aside>
     </>
   );
