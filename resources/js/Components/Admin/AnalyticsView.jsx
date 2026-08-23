@@ -48,7 +48,6 @@ export default function AnalyticsView({ analytics }) {
   const setRangeAndReload = (n) => { if (n === range || loading) return; setRange(n); router.reload({ data: { range: n }, only: ['analytics'], preserveState: true, preserveScroll: true, onStart: () => setLoading(true), onFinish: () => setLoading(false) }); };
   const kpis = analytics.kpis || {};
   const trend = analytics.clickTrend || { series: [] };
-  const engagement = analytics.engagement || {};
   const byDevice = analytics.clicksByDevice || { items: [] };
   const sourcePages = analytics.topSourcePages || { items: [] };
   const topArticles = analytics.topArticles || { items: [] };
@@ -66,10 +65,6 @@ export default function AnalyticsView({ analytics }) {
     <div className="adm-stats">
       {[{ ic: 'search', num: fmtNum(kpis.product_views), lab: 'Product views' }, { ic: 'check', num: fmtNum(kpis.clicks), lab: 'Outbound clicks' }, { ic: 'chart', num: fmtPct(kpis.click_through_rate), lab: 'Click-through rate' }].map((s) => { const Icon = I[s.ic]; return <div className="adm-stat" key={s.lab}><div className="ic"><Icon /></div><div className="num">{s.num}</div><div className="lab">{s.lab}</div></div>; })}
     </div>
-
-    {engagement.hasData && <div className="adm-panel" style={{ background: 'linear-gradient(135deg, rgba(207,138,50,0.06), rgba(12,26,45,0.02))' }}><h2>Product engagement</h2><p className="sub">Product-page views leading to outbound retailer clicks.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginTop: 16 }}>
-      {[['Product views', fmtNum(engagement.product_views)], ['“Buy Now” clicks', fmtNum(engagement.buy_now_clicks)], ['Click-through rate', fmtPct(engagement.click_through_rate)]].map(([label, value]) => <div key={label} style={{ padding: 16, background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--line)' }}><div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div><div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{value}</div></div>)}
-    </div></div>}
 
     <div className="adm-panel"><div className="adm-chart-head"><div><h2 style={{ margin: 0 }}>Outbound click trend</h2><p className="sub" style={{ margin: '4px 0 0' }}>Daily clicks from Limitra to retailer product pages.</p></div>{trend.hasData && <span className={'adm-badge-delta ' + (trend.change_pct >= 0 ? 'up' : 'down')}>{trend.change_pct >= 0 ? <I.trendUp /> : <I.trendDown />} {Math.abs(trend.change_pct)}% vs prior {range}d</span>}</div>
       {trend.hasData ? <><div style={{ display: 'flex', gap: 24, margin: '16px 0', padding: '12px 16px', background: 'var(--bg)', borderRadius: 8, fontSize: 13 }}><span><span style={{ color: 'var(--muted)' }}>Average daily clicks: </span><strong>{fmtNum(trend.avg_daily_clicks)}</strong></span><span><span style={{ color: 'var(--muted)' }}>Peak day: </span><strong>{fmtNum(trend.peak_clicks)}</strong>{trend.peak_date && <span style={{ color: 'var(--muted)' }}> ({trend.peak_date})</span>}</span></div>
