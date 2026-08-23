@@ -2,28 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Concerns\TracksVisitorContext;
 use App\Models\Look;
 use App\Models\Product;
-use App\Models\ProductView;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class ProductController extends Controller
 {
-    use TracksVisitorContext;
-
     public function show(Request $request, string $id)
     {
         $product = Product::with(['category', 'subcategory', 'detail'])
             ->where(fn ($q) => $q->where('id', $id)->orWhere('slug', $id))
             ->firstOrFail();
-
-        ProductView::create([
-            'product_id' => $product->id,
-            'source_page' => $this->pathFromReferer($request->headers->get('referer')),
-            'device' => $this->detectDevice($request->userAgent()),
-        ]);
 
         // "More to discover" is a random sample from the same category rather than the
         // hand-curated related_products field — that field has no admin UI to set it at all,

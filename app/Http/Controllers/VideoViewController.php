@@ -19,11 +19,23 @@ class VideoViewController extends Controller
             'source_page' => 'nullable|string|max:255',
         ]);
 
-        VideoView::create([
-            'video_id' => $video->id,
-            'source_page' => $request->input('source_page'),
-            'device' => $this->detectDevice($request->userAgent()),
-        ]);
+        if ($this->isBot($request->userAgent())) {
+            return response()->json(['ok' => true, 'ignored' => 'bot']);
+        }
+
+        $visitorHash = $this->visitorHash($request);
+        $viewDate = now()->toDateString();
+
+        VideoView::firstOrCreate(
+            ['dedupe_key' => hash('sha256', implode('|', ['video', $video->id, $visitorHash, $viewDate]))],
+            [
+                'video_id' => $video->id,
+                'source_page' => $request->input('source_page'),
+                'device' => $this->detectDevice($request->userAgent()),
+                'visitor_hash' => $visitorHash,
+                'view_date' => $viewDate,
+            ]
+        );
 
         return response()->json(['ok' => true]);
     }

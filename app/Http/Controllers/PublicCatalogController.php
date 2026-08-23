@@ -55,7 +55,7 @@ class PublicCatalogController extends Controller
                     // This is the publicly intended affiliate destination, never a private API URL.
                     'retailer_product_url' => $frontEnd['affiliate_url'],
                     'outbound_url' => url("/go/{$product->id}"),
-                    'link_relationship' => 'sponsored',
+                    'link_relationship' => 'sponsored nofollow',
                     'affiliate_disclosure' => 'Limitra may earn a commission from qualifying purchases at no extra cost to the customer.',
                     'last_updated' => $product->updated_at?->toAtomString(),
                 ];

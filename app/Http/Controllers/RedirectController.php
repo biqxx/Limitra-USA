@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\TracksVisitorContext;
+use App\Models\BotRedirectRequest;
 use App\Models\Click;
 use App\Models\Product;
 use Illuminate\Http\Request;
@@ -20,6 +21,15 @@ class RedirectController extends Controller
 
         if (! $product->affiliate_url) {
             abort(404);
+        }
+
+        if ($this->isBot($request->userAgent())) {
+            BotRedirectRequest::create([
+                'product_id' => $product->id,
+                'bot_name' => $this->botName($request->userAgent()),
+            ]);
+
+            return response()->noContent();
         }
 
         Click::create([

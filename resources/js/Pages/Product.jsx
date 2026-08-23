@@ -7,6 +7,7 @@ import { ProductRow, QuickView, SavedDrawer, ShareRow, shopCta } from '../Compon
 import { copyToClipboard } from '../lib/clipboard';
 import { formatPrice } from '../lib/price';
 import useSaved from '../hooks/useSaved';
+import useEngagedView from '../hooks/useEngagedView';
 
 function StyleTheLookPreview({ product, looks, productsMap }) {
   if (!looks?.length) return null;
@@ -79,6 +80,7 @@ export default function Product() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
+  useEngagedView(product ? `/products/${product.slug || product.id}/track-view` : null);
 
   const isSaved = saved.has(product?.id);
 
@@ -137,7 +139,7 @@ export default function Product() {
             <p className="pd-lead">{product.description}</p>
 
             <div className="pd-actions">
-              <a className="btn btn-primary pd-deal" href={product.affiliate_url ? `/go/${product.id}` : "#"} target="_blank" rel="noopener noreferrer sponsored">
+              <a className="btn btn-primary pd-deal" href={product.affiliate_url ? `/go/${product.id}` : "#"} target="_blank" rel="noopener noreferrer sponsored nofollow">
                 {shopCta()} <I.external />
               </a>
               <div className="row2">
@@ -152,7 +154,7 @@ export default function Product() {
               </div>
               <div className="pd-retailer-note">
                 <I.lock />
-                {product.retailer ? <> Independently curated by Limitra · Available from <strong>{product.retailer}</strong>. <a href={`/go/${product.id}`} target="_blank" rel="noopener noreferrer sponsored">View this product at {product.retailer}</a>. </> : ' Independently curated by Limitra. '}
+                {product.retailer ? <> Independently curated by Limitra · Available from <strong>{product.retailer}</strong>. <a href={`/go/${product.id}`} target="_blank" rel="noopener noreferrer sponsored nofollow">View this product at {product.retailer}</a>. </> : ' Independently curated by Limitra. '}
                 This is an affiliate link; Limitra may earn a commission at no extra cost to you. Purchases are completed securely with the retailer.
               </div>
             </div>

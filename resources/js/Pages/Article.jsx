@@ -5,6 +5,7 @@ import Seo from '../Components/Seo';
 import { EdCard, ArtBlock } from '../Components/EditorialSection';
 import { SavedDrawer } from '../Components/ProductCard';
 import useSaved from '../hooks/useSaved';
+import useEngagedView from '../hooks/useEngagedView';
 import { TAG_COLORS } from '../constants';
 
 export default function Article() {
@@ -15,6 +16,7 @@ export default function Article() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.palette = "riviera"; }, []);
+  useEngagedView(article ? `/articles/${article.slug}/track-view` : null);
 
   const productsMap = {};
   (products || []).forEach((p) => { productsMap[p.id] = p; });
