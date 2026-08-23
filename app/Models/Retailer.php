@@ -8,8 +8,4 @@ class Retailer extends Model
 {
     protected $fillable = ['name', 'network'];
 
-    public function conversions()
-    {
-        return $this->hasMany(Conversion::class);
-    }
 }

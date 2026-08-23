@@ -126,7 +126,6 @@ Route::middleware('admin')->group(function () {
     Route::delete('/admin/videos/{id}', [AdminController::class, 'destroyVideo'])->name('admin.videos.destroy');
     Route::post('/admin/videos/bulk-import', [AdminController::class, 'bulkImportVideos'])->name('admin.videos.bulk');
 
-    Route::post('/admin/conversions/bulk-import', [AdminController::class, 'bulkImportConversions'])->name('admin.conversions.bulk');
 
     Route::put('/admin/settings', [AdminController::class, 'updateSettings'])->name('admin.settings.update');
     Route::post('/admin/settings/extension-token/regenerate', [AdminController::class, 'regenerateExtensionToken'])->name('admin.settings.extension-token.regenerate');

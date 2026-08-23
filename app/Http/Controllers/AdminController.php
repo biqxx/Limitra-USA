@@ -817,11 +817,6 @@ class AdminController extends Controller
         return back();
     }
 
-    public function bulkImportConversions(Request $request)
-    {
-        return $this->queueBulkImport($request, 'conversions');
-    }
-
     public function uploadImage(Request $request)
     {
         $request->validate([
