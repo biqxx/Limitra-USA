@@ -83,6 +83,15 @@
     <meta name="google-site-verification" content="QBDaNQpvIBNWeOMuoqlLPgbiHuz3Bculk9QWHpdg_k4" />
     <title inertia>{{ $ogTitle }}</title>
 
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XT4CG5WMTS"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-XT4CG5WMTS');
+    </script>
+
     {{-- Primary & Open Graph / Twitter Meta Tags for Social Previews --}}
     <meta name="description" content="{{ $ogDesc }}">
     <meta name="robots" content="max-image-preview:large, max-snippet:-1, max-video-preview:-1">

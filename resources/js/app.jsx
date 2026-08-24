@@ -17,6 +17,17 @@ router.on('invalid', (event) => {
     }
 });
 
+// Inertia changes pages without a full browser load, so report each completed
+// client-side navigation as a GA4 page view as well as the initial page load.
+router.on('success', () => {
+    if (typeof window.gtag !== 'function') return;
+
+    window.gtag('config', 'G-XT4CG5WMTS', {
+        page_path: window.location.pathname + window.location.search,
+        page_title: document.title,
+    });
+});
+
 createInertiaApp({
     resolve: (name) => resolvePageComponent(`./Pages/${name}.jsx`, import.meta.glob('./Pages/**/*.jsx')),
     setup({ el, App, props }) {
