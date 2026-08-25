@@ -68,6 +68,61 @@ function LookMosaic({ look, productsMap }) {
   );
 }
 
+function getLookSlides(look, productsMap) {
+  const items = look.grid_items?.length > 0
+    ? look.grid_items
+    : (look.product_ids || []).map((id) => ({ id }));
+
+  return [
+    { image: look.hero_img, label: look.event || 'Styled look' },
+    ...items.map((item) => {
+      const product = item.id ? productsMap[item.id] : null;
+      return {
+        image: item.image || product?.image,
+        label: product?.name || 'Look detail',
+        href: product ? `/product/${product.slug || product.id}` : null,
+      };
+    }),
+  ].filter((slide) => slide.image);
+}
+
+function MobileLookCarousel({ look, productsMap }) {
+  const slides = getLookSlides(look, productsMap);
+  const [active, setActive] = useState(0);
+  const current = slides[active] || slides[0];
+
+  if (!current) return null;
+  const move = (direction) => setActive((index) => (index + direction + slides.length) % slides.length);
+  const MainTag = current.href ? Link : 'div';
+
+  return (
+    <div className="stl-mobile-carousel" aria-label="Look image carousel">
+      <div className="stl-carousel-stage">
+        <MainTag className="stl-carousel-main" {...(current.href ? { href: current.href } : {})}>
+          <img src={current.image} alt={current.label} />
+          {current.href && <span className="stl-carousel-shop">Shop this piece <span aria-hidden="true">→</span></span>}
+        </MainTag>
+        {slides.length > 1 && <>
+          <button className="stl-carousel-arrow is-prev" type="button" onClick={() => move(-1)} aria-label="Previous image">‹</button>
+          <button className="stl-carousel-arrow is-next" type="button" onClick={() => move(1)} aria-label="Next image">›</button>
+        </>}
+        <span className="stl-carousel-count">{active + 1} / {slides.length}</span>
+      </div>
+      <div className="stl-carousel-thumbs" aria-label="Choose an image">
+        {slides.map((slide, index) => (
+          <button key={`${slide.image}-${index}`} type="button"
+            className={`stl-carousel-thumb${index === active ? ' is-active' : ''}`}
+            onClick={() => setActive(index)}
+            aria-label={`Show image ${index + 1}: ${slide.label}`}
+            aria-current={index === active ? 'true' : undefined}>
+            <img src={slide.image} alt="" loading="lazy" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LookDetail({ look, productsMap }) {
   return (
     <div className="stl-look-card">
@@ -81,10 +136,13 @@ function LookDetail({ look, productsMap }) {
       </div>
 
       <div className="stl-look-body">
-        <div className="stl-photo">
-          <img src={look.hero_img} alt={look.event} loading="eager" />
+        <div className="stl-desktop-gallery">
+          <div className="stl-photo">
+            <img src={look.hero_img} alt={look.event} loading="eager" />
+          </div>
+          <LookMosaic look={look} productsMap={productsMap} />
         </div>
-        <LookMosaic look={look} productsMap={productsMap} />
+        <MobileLookCarousel look={look} productsMap={productsMap} />
       </div>
 
       <div className="stl-notes">
