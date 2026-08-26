@@ -6,20 +6,17 @@ import { admSlug, useUploadBusy, ImgInput, BulkImportButton, useLookup, useServe
 
 // The storefront mosaic is an 8-column grid — clamp spans to that so a tile
 // set here can never overflow the row it's placed on.
-const MAX_SPAN = 8;
-const clampSpan = (n) => Math.max(1, Math.min(MAX_SPAN, parseInt(n, 10) || 1));
-
 function GridBuilder({ items, onChange, products }) {
   const lookup = useMemo(() => { const m = {}; products.forEach((p) => { m[p.id] = p; if (p.slug) m[p.slug] = p; }); return m; }, [products]);
   const set = (i, patch) => { const n = [...items]; n[i] = { ...n[i], ...patch }; onChange(n); };
   const del = (i) => onChange(items.filter((_, j) => j !== i));
-  const add = () => onChange([...items, { type: 'product', id: '', image: '', colSpan: 1, rowSpan: 1 }]);
+  const add = () => onChange([...items, { type: 'product', id: '', image: '' }]);
   const move = (i, d) => { const n = [...items]; [n[i], n[i + d]] = [n[i + d], n[i]]; onChange(n); };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
-        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Grid items</div>
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Carousel images</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((item, i) => {
             const p = item.id ? lookup[item.id] : null;
@@ -36,19 +33,6 @@ function GridBuilder({ items, onChange, products }) {
                     {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.brand})</option>)}
                   </select>
                   <input className="adm-input" style={{ fontSize: 12 }} placeholder="Custom image URL (optional)" value={item.image && !item.image.startsWith('data:') ? item.image : ''} onChange={(e) => set(i, { image: e.target.value })} />
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Span:</span>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}>
-                      Cols
-                      <input type="number" min={1} max={MAX_SPAN} className="adm-input" style={{ width: 48, fontSize: 12, padding: '3px 6px' }}
-                        value={item.colSpan || 1} onChange={(e) => set(i, { colSpan: clampSpan(e.target.value) })} />
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}>
-                      Rows
-                      <input type="number" min={1} max={MAX_SPAN} className="adm-input" style={{ width: 48, fontSize: 12, padding: '3px 6px' }}
-                        value={item.rowSpan || 1} onChange={(e) => set(i, { rowSpan: clampSpan(e.target.value) })} />
-                    </label>
-                  </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <button type="button" className="adm-icon" onClick={() => move(i, -1)} disabled={i === 0}><I.back style={{ transform: 'rotate(90deg)' }} /></button>
@@ -63,25 +47,23 @@ function GridBuilder({ items, onChange, products }) {
       </div>
       <div>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Live preview</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gridAutoRows: 'minmax(auto, 1fr)', gridAutoFlow: 'dense', gap: 2, background: '#ddd5cc', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--line)', maxWidth: 520 }}>
-          {items.length === 0 && <div style={{ gridColumn: 'span 8', padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--muted)', background: 'var(--surface)' }}>Add items above</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8, background: '#ddd5cc', borderRadius: 8, padding: 8, border: '1px solid var(--line)', maxWidth: 520 }}>
+          {items.length === 0 && <div style={{ gridColumn: '1 / -1', padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--muted)', background: 'var(--surface)' }}>Add items above</div>}
           {items.map((item, i) => {
             const p = item.id ? lookup[item.id] : null;
             const src = item.image || (p && p.image) || '';
-            const colSpan = item.colSpan || 1;
-            const rowSpan = item.rowSpan || 1;
             const colors = ['#e8d5c8','#c8d5e8','#d5e8c8','#e8c8d5','#d5c8e8','#e8e0c8','#c8e8e0','#e0e8c8'];
             return (
-              <div key={i} style={{ gridColumn: `span ${colSpan}`, gridRow: `span ${rowSpan}`, aspectRatio: `${colSpan} / ${rowSpan}`, background: src ? 'transparent' : colors[i % colors.length], position: 'relative', overflow: 'hidden' }}>
+              <div key={i} style={{ aspectRatio: '3 / 4', borderRadius: 7, background: src ? 'transparent' : colors[i % colors.length], position: 'relative', overflow: 'hidden' }}>
                 {src && <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                 <div style={{ position: 'absolute', bottom: 4, left: 4, fontSize: 9, fontWeight: 700, background: 'rgba(0,0,0,.55)', color: '#fff', borderRadius: 3, padding: '2px 5px' }}>
-                  {colSpan}×{rowSpan} {p ? `· ${p.name.slice(0, 14)}…` : ''}
+                  {p ? `${p.name.slice(0, 14)}…` : `Image ${i + 1}`}
                 </div>
               </div>
             );
           })}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>8-column grid. Spans fill left-to-right, top-to-bottom, packed to avoid gaps.</div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>Images appear in this order in the storefront carousel.</div>
       </div>
     </div>
   );
@@ -108,7 +90,7 @@ function LookEditor({ initial, products, onCancel, onSave, existingIds }) {
       heroImg: heroImg.trim(),
       styleNotes: styleNotes.trim(),
       palette: palette.split(',').map((p) => p.trim()).filter(Boolean),
-      gridItems: gridItems.filter((it) => it.id || it.image),
+      gridItems: gridItems.filter((it) => it.id || it.image).map(({ colSpan, rowSpan, col_span, row_span, ...item }) => item),
     }, isEdit, initial.id);
   };
 
@@ -125,7 +107,7 @@ function LookEditor({ initial, products, onCancel, onSave, existingIds }) {
         <textarea className="adm-textarea" value={styleNotes} onChange={(e) => setStyleNotes(e.target.value)} placeholder="Editorial notes shown at the bottom of the look…" /></div>
       <div className="adm-field"><label>Colour palette (hex codes, comma-separated)</label>
         <input className="adm-input" value={palette} onChange={(e) => setPalette(e.target.value)} placeholder="#1a2744, #cf8a32, #f8f6f1" /></div>
-      <div className="adm-section-title">Product Grid</div>
+      <div className="adm-section-title">Product Carousel</div>
       <GridBuilder items={gridItems} onChange={setGridItems} products={products} />
       <div className="adm-form-foot">
         {err && <span className="err">{err}</span>}
