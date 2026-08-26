@@ -6,6 +6,57 @@ import { admSlug, useUploadBusy, ImgInput, BulkImportButton, useLookup, useServe
 
 // The storefront mosaic is an 8-column grid — clamp spans to that so a tile
 // set here can never overflow the row it's placed on.
+function SearchableProductSelect({ value, onChange, products }) {
+  const selected = products.find((product) => String(product.id) === String(value));
+  const [query, setQuery] = useState(selected ? `${selected.name} (${selected.brand})` : '');
+  const [open, setOpen] = useState(false);
+  const normalized = query.trim().toLowerCase();
+  const matches = products.filter((product) =>
+    !normalized || `${product.name} ${product.brand}`.toLowerCase().includes(normalized)
+  ).slice(0, 30);
+
+  const choose = (product) => {
+    onChange(product ? product.id : '');
+    setQuery(product ? `${product.name} (${product.brand})` : '');
+    setOpen(false);
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div className="adm-search" style={{ width: '100%' }}>
+        <I.search />
+        <input value={query} placeholder="Type to search products…"
+          onFocus={() => { setQuery(''); setOpen(true); }}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onBlur={() => {
+            setTimeout(() => {
+              setOpen(false);
+              setQuery(selected ? `${selected.name} (${selected.brand})` : '');
+            }, 120);
+          }} />
+      </div>
+      {open && (
+        <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, top: 'calc(100% + 4px)', maxHeight: 220, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--card)', boxShadow: '0 12px 28px rgba(20,25,40,.16)' }}>
+          {value && <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => choose(null)} style={{ width: '100%', padding: '9px 12px', border: 0, borderBottom: '1px solid var(--line)', background: 'none', textAlign: 'left', cursor: 'pointer', color: 'var(--muted)', fontSize: 12 }}>— Image only —</button>}
+          {matches.length === 0 && <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--muted)' }}>No matching products.</div>}
+          {matches.map((product) => (
+            <button key={product.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => choose(product)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', border: 0, borderBottom: '1px solid var(--line)', background: 'none', textAlign: 'left', cursor: 'pointer' }}>
+              {product.image
+                ? <img src={product.image} alt="" style={{ width: 34, height: 34, borderRadius: 5, objectFit: 'cover', flex: 'none' }} />
+                : <span style={{ width: 34, height: 34, borderRadius: 5, background: 'var(--bg)', display: 'grid', placeItems: 'center', flex: 'none' }}><I.image width="14" height="14" /></span>}
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.name}</span>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)' }}>{product.brand}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GridBuilder({ items, onChange, products }) {
   const lookup = useMemo(() => { const m = {}; products.forEach((p) => { m[p.id] = p; if (p.slug) m[p.slug] = p; }); return m; }, [products]);
   const set = (i, patch) => { const n = [...items]; n[i] = { ...n[i], ...patch }; onChange(n); };
@@ -28,10 +79,7 @@ function GridBuilder({ items, onChange, products }) {
                   : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.image style={{ color: 'var(--muted)' }} /></div>}
                 </div>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  <select className="adm-select" style={{ flex: 1, fontSize: 12.5 }} value={item.id || ''} onChange={(e) => set(i, { id: e.target.value })}>
-                    <option value="">— Image only —</option>
-                    {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.brand})</option>)}
-                  </select>
+                  <SearchableProductSelect value={item.id || ''} onChange={(id) => set(i, { id })} products={products} />
                   <input className="adm-input" style={{ fontSize: 12 }} placeholder="Custom image URL (optional)" value={item.image && !item.image.startsWith('data:') ? item.image : ''} onChange={(e) => set(i, { image: e.target.value })} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
