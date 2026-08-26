@@ -136,23 +136,16 @@ function LookDetail({ look, productsMap }) {
       </div>
 
       <div className="stl-look-body">
-        <div className="stl-desktop-gallery">
-          <div className="stl-photo">
-            <img src={look.hero_img} alt={look.event} loading="eager" />
-          </div>
-          <LookMosaic look={look} productsMap={productsMap} />
-        </div>
         <MobileLookCarousel look={look} productsMap={productsMap} />
-      </div>
-
-      <div className="stl-notes">
-        <span className="stl-notes-label">Style Notes</span>
-        <div className="stl-notes-sep"></div>
-        <p className="stl-notes-text">{look.style_notes}</p>
-        <div className="stl-palette">
-          {(look.palette || []).map((c) => (
-            <div className="stl-swatch" key={c} style={{ background: c }} title={c}></div>
-          ))}
+        <div className="stl-notes">
+          <span className="stl-notes-label">Style Notes</span>
+          <div className="stl-notes-sep"></div>
+          <p className="stl-notes-text">{look.style_notes}</p>
+          <div className="stl-palette">
+            {(look.palette || []).map((c) => (
+              <div className="stl-swatch" key={c} style={{ background: c }} title={c}></div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
