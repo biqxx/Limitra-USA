@@ -22,11 +22,16 @@ function trackVideoView(video) {
 }
 
 function VideoPlayer({ video, isActive = true }) {
-  const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying] = useState(isActive);
 
   useEffect(() => {
-    if (!isActive) setPlaying(false);
-  }, [isActive]);
+    if (isActive) {
+      setPlaying(true);
+      trackVideoView(video);
+    } else {
+      setPlaying(false);
+    }
+  }, [isActive, video?.id, video?.vid_id]);
 
   const ytId = video.youtube;
   const srcUrl = video.video_url;
@@ -504,26 +509,103 @@ function VideoModal({ video, onClose, allVideos, currentIndex, onNext, onPrev })
 
 function VideoCard({ video, onPlay }) {
   const [hover, setHover] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const hoverTimer = useRef(null);
+
+  const handleMouseEnter = () => {
+    setHover(true);
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => {
+      setPreview(true);
+    }, 2000);
+  };
+
+  const handleMouseLeave = () => {
+    setHover(false);
+    setPreview(false);
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+  };
+
+  const handleClick = () => {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+    setPreview(false);
+    onPlay(video);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    };
+  }, []);
+
+  const ytId = video.youtube;
+  const srcUrl = video.video_url;
+
   return (
     <div
       className="vid-card"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onClick={() => onPlay(video)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onClick={handleClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter") onPlay(video); }}
+      onKeyDown={(e) => { if (e.key === "Enter") handleClick(); }}
       aria-label={`Watch: ${video.title}`}
     >
       <div className="vid-thumb">
-        <img src={video.thumb} alt={video.title} loading="lazy" />
-        <div className={"vid-overlay" + (hover ? " show" : "")}>
+        <img
+          src={video.thumb}
+          alt={video.title}
+          loading="lazy"
+          style={{ opacity: preview ? 0 : 1, transition: "opacity .3s ease" }}
+        />
+        {preview && ytId && (
+          <iframe
+            src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&loop=1&playlist=${ytId}&playsinline=1`}
+            allow="autoplay"
+            title={`Preview: ${video.title}`}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              border: "none",
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          />
+        )}
+        {preview && !ytId && srcUrl && (
+          <video
+            src={srcUrl}
+            autoPlay
+            muted
+            loop
+            playsInline
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          />
+        )}
+        <div className={"vid-overlay" + (hover && !preview ? " show" : "")}>
           <div className="vid-play-btn">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
           </div>
         </div>
-        <span className="vid-dur">{video.duration}</span>
-        <span className="vid-tag-pill" style={{ background: TAG_COLORS_V[video.tag] || "var(--accent)" }}>{video.tag}</span>
+        <span className="vid-dur" style={{ zIndex: 3 }}>{video.duration}</span>
+        <span className="vid-tag-pill" style={{ background: TAG_COLORS_V[video.tag] || "var(--accent)", zIndex: 3 }}>{video.tag}</span>
       </div>
       <div className="vid-info">
         <h3>{video.title}</h3>
@@ -550,7 +632,7 @@ export function VideoSection({ videos }) {
   const scroll = (dir) => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollBy({ left: dir * 340, behavior: "smooth" });
+    el.scrollBy({ left: dir * 360, behavior: "smooth" });
     setTimeout(updateArrows, 350);
   };
 
@@ -647,8 +729,8 @@ export function VideoGrid({ videos }) {
         </div>
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-          gap: 20,
+          gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+          gap: 24,
         }}>
           {visible.map((v) => (
             <VideoCard key={v.id} video={v} onPlay={goToVideo} />

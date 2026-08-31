@@ -1866,12 +1866,15 @@ section { padding-block: clamp(48px, 6vw, 84px); }
 
 /* card */
 .vid-card {
-  flex: none; width: 240px; cursor: pointer;
+  flex: none; width: 340px; cursor: pointer;
   scroll-snap-align: start;
+}
+@media (max-width: 640px) {
+  .vid-card { width: 280px; }
 }
 .vid-thumb {
   position: relative; border-radius: 12px; overflow: hidden;
-  aspect-ratio: 9 / 16; background: var(--card);
+  aspect-ratio: 16 / 9; background: var(--card);
 }
 .vid-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s ease; }
 .vid-card:hover .vid-thumb img { transform: scale(1.05); }
