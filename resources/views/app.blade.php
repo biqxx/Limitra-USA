@@ -7,7 +7,7 @@
     $ogSiteName = config('app.name', 'Limitra USA');
     $ogTitle = $ogSiteName;
     $ogDesc = 'Independently curated fashion, beauty, home and lifestyle picks from third-party retailers. Limitra may earn a commission from eligible purchases.';
-    $ogImage = 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1200&q=80';
+    $ogImage = url('/og-image.jpg');
     $ogType = 'website';
     $ogUrl = url()->current();
     $productSchema = null;
@@ -107,6 +107,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="icon" type="image/x-icon" href="{{ url('/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url('/favicon-16x16.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url('/favicon-32x32.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url('/apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url('/site.webmanifest') }}">
+    <meta name="theme-color" content="#0b1828">
     <meta name="google-site-verification" content="QBDaNQpvIBNWeOMuoqlLPgbiHuz3Bculk9QWHpdg_k4" />
     <title inertia>{{ $ogTitle }}</title>
 
