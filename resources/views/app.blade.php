@@ -19,6 +19,31 @@
         $pDesc = $productMeta['description'] ?? '';
         $retailer = trim((string) ($productMeta['retailer'] ?? ''));
         $affiliateUrl = trim((string) ($productMeta['affiliate_url'] ?? ''));
+        $rawPrice = trim((string) ($productMeta['price'] ?? ''));
+        $schemaPrice = null;
+        $schemaCurrency = 'USD';
+
+        // Product prices are stored as display strings (for example "$1,299.00").
+        // Google requires Offer.price to be numeric and priceCurrency to be ISO 4217.
+        if (preg_match('/\d[\d,\s]*(?:\.\d+)?/', $rawPrice, $priceMatch)) {
+            $numericPrice = str_replace([',', ' '], '', $priceMatch[0]);
+            if (is_numeric($numericPrice) && (float) $numericPrice >= 0) {
+                $schemaPrice = number_format((float) $numericPrice, 2, '.', '');
+            }
+        }
+
+        $upperPrice = strtoupper($rawPrice);
+        if (str_contains($upperPrice, 'GBP') || str_contains($rawPrice, '£')) {
+            $schemaCurrency = 'GBP';
+        } elseif (str_contains($upperPrice, 'EUR') || str_contains($rawPrice, '€')) {
+            $schemaCurrency = 'EUR';
+        } elseif (str_contains($upperPrice, 'NGN') || str_contains($rawPrice, '₦')) {
+            $schemaCurrency = 'NGN';
+        } elseif (str_contains($upperPrice, 'CAD') || str_contains($upperPrice, 'C$')) {
+            $schemaCurrency = 'CAD';
+        } elseif (str_contains($upperPrice, 'AUD') || str_contains($upperPrice, 'A$')) {
+            $schemaCurrency = 'AUD';
+        }
         $baseDesc = \Illuminate\Support\Str::limit(!empty($pDesc) ? strip_tags($pDesc) : 'A Limitra USA independently curated product listing.', 105);
         $retailerContext = $retailer ? " Available from {$retailer}." : '';
         $affiliateContext = $affiliateUrl ? ' This page contains an affiliate link; Limitra may earn a commission at no extra cost to you.' : '';
@@ -36,9 +61,11 @@
             'description' => $ogDesc,
             'image' => $ogImage,
             'url' => $ogUrl,
-            'offers' => $affiliateUrl ? array_filter([
+            'offers' => ($affiliateUrl && $schemaPrice !== null) ? array_filter([
                 '@type' => 'Offer',
                 'url' => $affiliateUrl,
+                'price' => $schemaPrice,
+                'priceCurrency' => $schemaCurrency,
                 'seller' => $retailer ? ['@type' => 'Organization', 'name' => $retailer] : null,
             ]) : null,
         ]);
